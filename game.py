@@ -20,9 +20,11 @@ if not TOKEN or not GROUP_ID:
 
 DATA_FILE = os.path.join(BASE_DIR, "players.json")
 DUELS_FILE = os.path.join(BASE_DIR, "duels.json")
+BOSS_FILE = os.path.join(BASE_DIR, "boss.json")
 WORK_COOLDOWN_SECONDS = 60
 MIN_BET = 10
-DUEL_TIMEOUT_SECONDS = 300  # 5 минут на принятие вызова
+DUEL_TIMEOUT_SECONDS = 300
+BOSS_TIMEOUT_SECONDS = 300  # 5 минут на бой с боссом
 
 session = VkApi(token=TOKEN)
 api = session.get_api()
@@ -42,6 +44,15 @@ ITEMS = {
 ITEM_EMOJI = {
     1: "🧪", 2: "⚔️", 3: "️", 4: "🛡️", 5: "🛡️",
     6: "👑", 7: "💎", 8: "🧪",
+}
+
+# ==================== БОССЫ ====================
+BOSS_LEVELS = {
+    1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
+    2: {"name": "Огр-разбойник", "hp": 400, "attack": 25, "defense": 10, "reward": 200, "exp": 20},
+    3: {"name": "Тёмный рыцарь", "hp": 800, "attack": 35, "defense": 15, "reward": 400, "exp": 40},
+    4: {"name": "Дракон", "hp": 1500, "attack": 50, "defense": 20, "reward": 800, "exp": 80},
+    5: {"name": "Древний демон", "hp": 3000, "attack": 70, "defense": 30, "reward": 1500, "exp": 150},
 }
 
 
@@ -77,6 +88,21 @@ def load_duels():
 def save_duels(duels):
     with open(DUELS_FILE, "w", encoding="utf-8") as f:
         json.dump(duels, f, ensure_ascii=False, indent=2)
+
+
+def load_boss():
+    if os.path.exists(BOSS_FILE):
+        try:
+            with open(BOSS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_boss(boss_data):
+    with open(BOSS_FILE, "w", encoding="utf-8") as f:
+        json.dump(boss_data, f, ensure_ascii=False, indent=2)
 
 
 # ==================== ИГРОКИ ====================
@@ -155,7 +181,12 @@ HELP_TEXT = (
     "PvP:\n"
     "вызов @id123 — вызвать игрока на дуэль\n"
     "принять — принять вызов\n"
-    "отклонить — отклонить вызов"
+    "отклонить — отклонить вызов\n\n"
+    "Босс:\n"
+    "босс — начать/присоединиться к бою\n"
+    "атака — атаковать босса\n"
+    "статус — показать HP босса\n"
+    "сдаться — покинуть бой"
 )
 
 
@@ -359,20 +390,13 @@ def play_duel_vs_bot(player, peer_id):
 
 # ==================== PvP ДУЭЛИ ====================
 def parse_user_id_from_mention(text):
-    """
-    Извлекает числовой ID из упоминания ВК.
-    Поддерживает форматы: @id123456, [id123456|Имя], id123456, просто 123456
-    """
     import re
-    # [id123456|Имя]
     m = re.search(r'\[id(\d+)', text)
     if m:
         return int(m.group(1))
-    # @id123456
     m = re.search(r'@id(\d+)', text)
     if m:
         return int(m.group(1))
-    # просто число
     m = re.search(r'(\d{5,10})', text)
     if m:
         return int(m.group(1))
@@ -380,7 +404,6 @@ def parse_user_id_from_mention(text):
 
 
 def challenge_player(challenger_id, challenged_id, challenger_peer_id):
-    """Игрок challenger вызывает challenged на дуэль"""
     if challenged_id == challenger_id:
         send(challenger_peer_id, "Нельзя вызвать самого себя на дуэль!")
         return
@@ -391,16 +414,12 @@ def challenge_player(challenger_id, challenged_id, challenger_peer_id):
 
     duels = load_duels()
 
-    # Проверяем, нет ли уже активного вызова для challenged
     if str(challenged_id) in duels:
         existing = duels[str(challenged_id)]
-        # Проверяем, не истёк ли таймаут
         if time.time() - existing.get("timestamp", 0) < DUEL_TIMEOUT_SECONDS:
             send(challenger_peer_id, "Этот игрок уже получил вызов. Подождите, пока он ответит.")
             return
-        # Таймаут истёк — удаляем старый вызов
 
-    # Создаём вызов
     duels[str(challenged_id)] = {
         "challenger_id": challenger_id,
         "challenger_peer_id": challenger_peer_id,
@@ -422,7 +441,6 @@ def challenge_player(challenger_id, challenged_id, challenger_peer_id):
 
 
 def accept_duel(challenged_id, challenged_peer_id):
-    """Игрок принимает вызов на дуэль"""
     duels = load_duels()
 
     if str(challenged_id) not in duels:
@@ -431,7 +449,6 @@ def accept_duel(challenged_id, challenged_peer_id):
 
     challenge = duels[str(challenged_id)]
 
-    # Проверяем таймаут
     if time.time() - challenge.get("timestamp", 0) >= DUEL_TIMEOUT_SECONDS:
         del duels[str(challenged_id)]
         save_duels(duels)
@@ -441,11 +458,9 @@ def accept_duel(challenged_id, challenged_peer_id):
     challenger_id = challenge["challenger_id"]
     challenger_peer_id = challenge["challenger_peer_id"]
 
-    # Удаляем вызов
     del duels[str(challenged_id)]
     save_duels(duels)
 
-    # Начинаем дуэль
     send(challenged_peer_id, "Вы приняли вызов! Начинается дуэль...")
     send(challenger_peer_id, "Соперник принял вызов! Начинается дуэль...")
 
@@ -456,7 +471,6 @@ def accept_duel(challenged_id, challenged_peer_id):
 
 
 def decline_duel(challenged_id, challenged_peer_id):
-    """Игрок отклоняет вызов"""
     duels = load_duels()
 
     if str(challenged_id) not in duels:
@@ -476,7 +490,6 @@ def decline_duel(challenged_id, challenged_peer_id):
 
 
 def play_pvp_duel(player1, player2, peer1_id, peer2_id):
-    """PvP дуэль между двумя игроками"""
     hp1 = 100
     hp2 = 100
     log = []
@@ -485,7 +498,6 @@ def play_pvp_duel(player1, player2, peer1_id, peer2_id):
         if hp1 <= 0 or hp2 <= 0:
             break
 
-        # Оба бьют одновременно
         dmg1 = get_player_damage(player1)
         dmg2 = get_player_damage(player2)
         def1 = get_player_defense(player1)
@@ -499,14 +511,13 @@ def play_pvp_duel(player1, player2, peer1_id, peer2_id):
 
         log.append(f"Раунд {round_number}: {player1['name']} -{actual_dmg1}, {player2['name']} -{actual_dmg2}")
 
-    # Определяем победителя
     if hp1 > 0 and hp2 <= 0:
         reward = random.randint(50, 100)
         player1["balance"] += reward
         add_exp(player1, 5)
         add_exp(player2, 2)
         save_players()
-        result = f" Победил {player1['name']}! Награда: {reward} монет."
+        result = f"🏆 Победил {player1['name']}! Награда: {reward} монет."
     elif hp2 > 0 and hp1 <= 0:
         reward = random.randint(50, 100)
         player2["balance"] += reward
@@ -528,10 +539,225 @@ def play_pvp_duel(player1, player2, peer1_id, peer2_id):
         send(peer2_id, result_message)
 
 
+# ==================== БОСС ====================
+def start_boss_fight(user_id, peer_id):
+    """Начать или присоединиться к бою с боссом"""
+    boss_data = load_boss()
+
+    # Проверяем, есть ли активный бой
+    if boss_data.get("active"):
+        # Проверяем таймаут
+        if time.time() - boss_data.get("start_time", 0) > BOSS_TIMEOUT_SECONDS:
+            # Таймаут истёк — сбрасываем
+            boss_data = {}
+            save_boss(boss_data)
+            send(peer_id, "Предыдущий бой истёк. Начинаем нового босса!")
+            return create_new_boss(user_id, peer_id)
+        
+        # Бой активен — присоединяемся
+        if str(user_id) in boss_data.get("participants", {}):
+            send(peer_id, "Ты уже участвуешь в бою! Пиши 'атака' чтобы бить.")
+            return
+        
+        player = get_player(user_id)
+        boss_data["participants"][str(user_id)] = {
+            "name": player["name"],
+            "damage": 0,
+            "peer_id": peer_id,
+        }
+        save_boss(boss_data)
+        
+        boss_level = boss_data.get("level", 1)
+        boss_name = BOSS_LEVELS[boss_level]["name"]
+        send(peer_id, f"Ты присоединился к бою с {boss_name}!\nHP босса: {boss_data['current_hp']}/{boss_data['max_hp']}\nПиши 'атака' чтобы атаковать.")
+        return
+
+    # Начинаем новый бой
+    create_new_boss(user_id, peer_id)
+
+
+def create_new_boss(user_id, peer_id):
+    """Создать нового босса"""
+    player = get_player(user_id)
+    
+    # Определяем уровень босса на основе уровня игрока
+    player_level = player.get("level", 1)
+    if player_level <= 2:
+        boss_level = 1
+    elif player_level <= 5:
+        boss_level = 2
+    elif player_level <= 10:
+        boss_level = 3
+    elif player_level <= 15:
+        boss_level = 4
+    else:
+        boss_level = 5
+    
+    boss = BOSS_LEVELS[boss_level]
+    
+    boss_data = {
+        "active": True,
+        "level": boss_level,
+        "name": boss["name"],
+        "max_hp": boss["hp"],
+        "current_hp": boss["hp"],
+        "attack": boss["attack"],
+        "defense": boss["defense"],
+        "start_time": time.time(),
+        "participants": {
+            str(user_id): {
+                "name": player["name"],
+                "damage": 0,
+                "peer_id": peer_id,
+            }
+        },
+    }
+    
+    save_boss(boss_data)
+    
+    send(peer_id, 
+         f"👹 {boss['name']} (ур. {boss_level}) появился!\n"
+         f"HP: {boss['hp']}\n"
+         f"Атака: {boss['attack']}\n"
+         f"Защита: {boss['defense']}\n\n"
+         f"Пиши 'атака' чтобы бить!\n"
+         f"Другие могут присоединиться командой 'босс'")
+
+
+def attack_boss(user_id, peer_id):
+    """Атаковать босса"""
+    boss_data = load_boss()
+
+    if not boss_data.get("active"):
+        send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
+        return
+
+    # Проверяем таймаут
+    if time.time() - boss_data.get("start_time", 0) > BOSS_TIMEOUT_SECONDS:
+        boss_data = {}
+        save_boss(boss_data)
+        send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
+        return
+
+    # Проверяем, участник ли
+    if str(user_id) not in boss_data["participants"]:
+        send(peer_id, "Ты не участвуешь в этом бою! Напиши 'босс' чтобы присоединиться.")
+        return
+
+    player = get_player(user_id)
+    boss_name = boss_data["name"]
+    boss_defense = boss_data.get("defense", 0)
+    
+    # Считаем урон
+    damage = get_player_damage(player)
+    actual_damage = max(1, damage - boss_defense)
+    
+    # Наносим урон
+    boss_data["current_hp"] -= actual_damage
+    boss_data["participants"][str(user_id)]["damage"] += actual_damage
+    
+    # Босс атакует в ответ (случайный урон)
+    boss_attack = boss_data.get("attack", 10)
+    player_defense = get_player_defense(player)
+    boss_damage = max(1, boss_attack - player_defense)
+    
+    # Сохраняем
+    save_boss(boss_data)
+    
+    send(peer_id, f"Ты нанёс {actual_damage} урона {boss_name}!\n"
+         f"HP босса: {max(0, boss_data['current_hp'])}/{boss_data['max_hp']}\n"
+         f"Босс атакует тебя на {boss_damage} урона.")
+    
+    # Проверяем, не умер ли босс
+    if boss_data["current_hp"] <= 0:
+        defeat_boss(boss_data)
+
+
+def defeat_boss(boss_data):
+    """Босс побеждён — распределяем награды"""
+    boss_level = boss_data["level"]
+    base_reward = BOSS_LEVELS[boss_level]["reward"]
+    base_exp = BOSS_LEVELS[boss_level]["exp"]
+    
+    total_damage = sum(p["damage"] for p in boss_data["participants"].values())
+    
+    messages = [f" {boss_data['name']} повержен!\n\nНаграды:\n"]
+    
+    for participant_id, data in boss_data["participants"].items():
+        if total_damage > 0:
+            share = data["damage"] / total_damage
+        else:
+            share = 1 / len(boss_data["participants"])
+        
+        reward = int(base_reward * share)
+        exp = int(base_exp * share)
+        
+        player = get_player(int(participant_id))
+        player["balance"] += reward
+        add_exp(player, exp)
+        
+        messages.append(f"{data['name']}: +{reward} монет, +{exp} опыта\n"
+                       f"   (нанёс {data['damage']} урона)")
+    
+    save_players()
+    boss_data["active"] = False
+    save_boss(boss_data)
+    
+    # Отправляем всем участникам
+    for participant_id, data in boss_data["participants"].items():
+        peer_id = data.get("peer_id", int(participant_id))
+        send(peer_id, "\n".join(messages))
+
+
+def show_boss_status(user_id, peer_id):
+    """Показать статус боя с боссом"""
+    boss_data = load_boss()
+
+    if not boss_data.get("active"):
+        send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
+        return
+
+    if time.time() - boss_data.get("start_time", 0) > BOSS_TIMEOUT_SECONDS:
+        send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
+        return
+
+    lines = [
+        f"👹 {boss_data['name']} (ур. {boss_data['level']})",
+        f"HP: {boss_data['current_hp']}/{boss_data['max_hp']}",
+        f"Атака: {boss_data.get('attack', 0)}",
+        f"Защита: {boss_data.get('defense', 0)}",
+        "",
+        f"Участников: {len(boss_data['participants'])}",
+    ]
+    
+    if str(user_id) in boss_data["participants"]:
+        my_damage = boss_data["participants"][str(user_id)]["damage"]
+        lines.append(f"Твой урон: {my_damage}")
+    
+    send(peer_id, "\n".join(lines))
+
+
+def leave_boss_fight(user_id, peer_id):
+    """Покинуть бой с боссом"""
+    boss_data = load_boss()
+
+    if not boss_data.get("active"):
+        send(peer_id, "Ты не участвуешь в бою.")
+        return
+
+    if str(user_id) not in boss_data["participants"]:
+        send(peer_id, "Ты не участвуешь в этом бою.")
+        return
+
+    del boss_data["participants"][str(user_id)]
+    save_boss(boss_data)
+    
+    send(peer_id, "Ты покинул бой с боссом.")
+
+
 # ==================== ОБРАБОТЧИК КОМАНД ====================
 def handle(user_id, peer_id, text):
     player = get_player(user_id)
-    # Сохраняем последний peer_id для отправки сообщений этому игроку
     player["last_peer_id"] = peer_id
     save_players()
 
@@ -546,6 +772,10 @@ def handle(user_id, peer_id, text):
 
     if command in ["баланс", "balance", "!баланс"]:
         send(peer_id, f"Баланс: {player['balance']} монет.")
+        return
+
+    if command in ["id", "айди", "мой id"]:
+        send(peer_id, f"Твой ID: {user_id}\nИспользуй его для вызова: вызов @id{user_id}")
         return
 
     if command in ["работа", "work", "!работа"]:
@@ -657,7 +887,6 @@ def handle(user_id, peer_id, text):
 
     # === PvP команды ===
     if command.startswith("вызов ") or command.startswith("pvp ") or command.startswith("дуэль @"):
-        # Извлекаем ID из упоминания
         opponent_id = parse_user_id_from_mention(text)
         if opponent_id is None:
             send(peer_id, "Не удалось определить ID. Формат: вызов @id123456")
@@ -671,6 +900,23 @@ def handle(user_id, peer_id, text):
 
     if command in ["отклонить", "decline", "отмена"]:
         decline_duel(user_id, peer_id)
+        return
+
+    # === Босс команды ===
+    if command in ["босс", "boss", "!босс"]:
+        start_boss_fight(user_id, peer_id)
+        return
+
+    if command in ["атака", "attack", "удар", "hit", "бить"]:
+        attack_boss(user_id, peer_id)
+        return
+
+    if command in ["статус", "status", "босс статус"]:
+        show_boss_status(user_id, peer_id)
+        return
+
+    if command in ["сдаться", "leave", "выйти"]:
+        leave_boss_fight(user_id, peer_id)
         return
 
     # Неизвестная команда — молчим
