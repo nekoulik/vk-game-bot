@@ -7,7 +7,7 @@ from collections import Counter
 from vk_api import VkApi
 from vk_api.utils import get_random_id
 from dotenv import load_dotenv
-import db  # <-- новый модуль
+import db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -26,7 +26,6 @@ BOSS_TIMEOUT_SECONDS = 600
 session = VkApi(token=TOKEN)
 api = session.get_api()
 
-# ==================== МАГАЗИН ====================
 ITEMS = {
     1: {"name": "Зелье здоровья", "price": 100, "type": "consumable", "desc": "Восстанавливает 30 HP в дуэли", "effect": {"hp": 30}},
     2: {"name": "Ржавый меч", "price": 500, "type": "weapon", "desc": "+10 к урону в дуэлях", "effect": {"damage": 10}},
@@ -38,12 +37,8 @@ ITEMS = {
     8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
 }
 
-ITEM_EMOJI = {
-    1: "", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "🛡️",
-    6: "👑", 7: "💎", 8: "🧪",
-}
+ITEM_EMOJI = {1: "🧪", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "🛡️", 6: "👑", 7: "💎", 8: "🧪"}
 
-# ==================== БОССЫ ====================
 BOSS_LEVELS = {
     1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
     2: {"name": "Огр-разбойник", "hp": 400, "attack": 25, "defense": 10, "reward": 200, "exp": 20},
@@ -52,26 +47,20 @@ BOSS_LEVELS = {
     5: {"name": "Древний демон", "hp": 3000, "attack": 70, "defense": 30, "reward": 1500, "exp": 150},
 }
 
-
-# ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
 def get_name(user_id):
     try:
         users = api.users.get(user_ids=user_id)
         if users:
             full_name = f"{users[0].get('first_name', '')} {users[0].get('last_name', '')}".strip()
-            if full_name:
-                return full_name
-    except Exception:
-        pass
+            if full_name: return full_name
+    except Exception: pass
     return f"ID{user_id}"
-
 
 def send(peer_id, text):
     try:
         api.messages.send(peer_id=peer_id, message=text, random_id=get_random_id())
     except Exception as e:
         print(f"Ошибка отправки в {peer_id}: {e}")
-
 
 def add_exp(player, amount=1):
     player["exp"] += amount
@@ -82,729 +71,424 @@ def add_exp(player, amount=1):
         leveled_up = True
     return leveled_up
 
-
-# ==================== СПРАВКА ====================
 HELP_TEXT = (
     "Игровой бот\n\n"
-    "Основные:\n"
-    "старт — начать\n"
-    "помощь — список команд\n"
-    "баланс — показать баланс\n"
-    "работа — заработать монеты\n"
-    "ставка 50 — сделать ставку\n"
-    "дуэль — сразиться с ботом\n"
-    "бонус — ежедневный бонус\n"
-    "топ — рейтинг игроков\n"
-    "профиль — показать профиль\n\n"
-    "Магазин:\n"
-    "магазин — каталог предметов\n"
-    "инвентарь — твои предметы\n"
-    "купить <id> — купить предмет\n"
-    "экипировать <id> — надеть предмет\n\n"
-    "PvP:\n"
-    "вызов @id123 — вызвать игрока на дуэль\n"
-    "принять — принять вызов\n"
-    "отклонить — отклонить вызов\n\n"
-    "Босс:\n"
-    "босс — начать/присоединиться к бою\n"
-    "атака — атаковать босса\n"
-    "статус — показать HP босса\n"
-    "сдаться — покинуть бой"
+    "Основные: старт, помощь, баланс, работа, ставка 50, дуэль, бонус, топ, профиль\n"
+    "Магазин: магазин, инвентарь, купить <id>, экипировать <id>\n"
+    "PvP: вызов @id123, принять, отклонить\n"
+    "Босс: босс, атака, статус, сдаться\n"
+    "Прогресс: квесты, выполнить квесты, достижения"
 )
 
-
-# ==================== МАГАЗИН ====================
 def show_shop(peer_id):
     lines = ["Магазин предметов\n"]
     for item_id, item in ITEMS.items():
-        emoji = ITEM_EMOJI.get(item_id, "📦")
-        lines.append(f"{item_id}. {emoji} {item['name']} — {item['price']} монет")
-        lines.append(f"   {item['desc']}")
-        lines.append("")
-    lines.append("Чтобы купить, напиши: купить <номер> (например: купить 1)")
+        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '📦')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
+    lines.append("Чтобы купить: купить <номер>")
     send(peer_id, "\n".join(lines))
 
-
 def buy_item(player, peer_id, item_id_str):
-    try:
-        item_id = int(item_id_str)
+    try: item_id = int(item_id_str)
     except ValueError:
-        send(peer_id, "Укажи номер предмета числом (пример: купить 1)")
+        send(peer_id, "Укажи номер предмета числом")
         return
-
     if item_id not in ITEMS:
-        send(peer_id, f"Предмета с номером {item_id} нет. Смотри: магазин")
+        send(peer_id, "Такого предмета нет")
         return
-
     item = ITEMS[item_id]
     if player["balance"] < item["price"]:
-        send(peer_id, f"Недостаточно монет! Нужно {item['price']}, у тебя {player['balance']}")
+        send(peer_id, f"Недостаточно монет! Нужно {item['price']}")
         return
-
     player["balance"] -= item["price"]
     db.save_player(player)
     db.add_to_inventory(player["user_id"], item_id, 1)
-
-    emoji = ITEM_EMOJI.get(item_id, "📦")
-    send(peer_id, f"Куплено: {emoji} {item['name']} за {item['price']} монет!\nТеперь в твоём инвентаре (команда: инвентарь)")
-
+    send(peer_id, f"Куплено: {ITEM_EMOJI.get(item_id, '📦')} {item['name']} за {item['price']} монет!")
 
 def show_inventory(player, peer_id):
     inventory = db.get_inventory(player["user_id"])
     if not inventory:
-        send(peer_id, "Твой инвентарь пуст. Загляни в магазин!")
+        send(peer_id, "Твой инвентарь пуст.")
         return
-
     lines = ["Твой инвентарь\n"]
     equipped = db.get_equipment(player["user_id"])
-
     for item_id, count in sorted(inventory.items()):
         if item_id in ITEMS:
             item = ITEMS[item_id]
-            emoji = ITEM_EMOJI.get(item_id, "")
-            equipped_mark = ""
-            for slot, eq_id in equipped.items():
-                if eq_id == item_id:
-                    equipped_mark = " (надето)"
-                    break
-            lines.append(f"{item_id}. {emoji} {item['name']} x{count}{equipped_mark}")
-
+            eq_mark = " (надето)" if any(eq_id == item_id for eq_id in equipped.values()) else ""
+            lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '')} {item['name']} x{count}{eq_mark}")
     lines.append("\nНадеть: экипировать <номер>")
     send(peer_id, "\n".join(lines))
 
-
 def use_item(player, peer_id, item_id_str):
-    try:
-        item_id = int(item_id_str)
+    try: item_id = int(item_id_str)
     except ValueError:
-        send(peer_id, "Укажи номер предмета числом")
+        send(peer_id, "Укажи номер числом")
         return
-
     inventory = db.get_inventory(player["user_id"])
     if item_id not in inventory or inventory[item_id] <= 0:
         send(peer_id, "У тебя нет этого предмета!")
         return
-
-    if item_id not in ITEMS:
-        send(peer_id, "Неизвестный предмет")
-        return
-
+    if item_id not in ITEMS: return
     item = ITEMS[item_id]
-    emoji = ITEM_EMOJI.get(item_id, "")
-
     if item["type"] == "consumable":
         db.remove_from_inventory(player["user_id"], item_id, 1)
-        send(peer_id, f"Использовано: {emoji} {item['name']}\n{item['desc']}")
+        send(peer_id, f"Использовано: {ITEM_EMOJI.get(item_id, '')} {item['name']}\n{item['desc']}")
     elif item["type"] in ["weapon", "armor", "cosmetic"]:
         equipped = db.get_equipment(player["user_id"])
-        old_item = equipped.get(item["type"])
+        old = equipped.get(item["type"])
         db.set_equipment(player["user_id"], item["type"], item_id)
+        msg = f"Надето: {ITEM_EMOJI.get(item_id, '')} {item['name']}"
+        if old and old in ITEMS: msg += f"\n(предыдущее {ITEMS[old]['name']} снято)"
+        send(peer_id, msg)
 
-        if old_item and old_item in ITEMS:
-            send(peer_id, f"Надето: {emoji} {item['name']}\n(предыдущее {ITEMS[old_item]['name']} снято)")
-        else:
-            send(peer_id, f"Надето: {emoji} {item['name']}\n{item['desc']}")
-    else:
-        send(peer_id, "Этот предмет нельзя использовать")
-
-
-# ==================== ТОП ====================
 def show_top(peer_id):
     ranked = db.get_top_players(10)
     if not ranked:
         send(peer_id, "Пока нет игроков.")
         return
-
     medals = ["1 место", "2 место", "3 место"]
     lines = ["Топ игроков:\n"]
     for i, p in enumerate(ranked, start=1):
-        place = medals[i - 1] if i <= 3 else f"{i}."
-        lines.append(f"{place} {p['name']} — ур. {p['level']}, {p['balance']} монет")
-
+        lines.append(f"{medals[i-1] if i <= 3 else f'{i}.'} {p['name']} — ур. {p['level']}, {p['balance']} монет")
     send(peer_id, "\n".join(lines))
 
-
-# ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 def claim_daily_bonus(player, peer_id):
     today = datetime.date.today().isoformat()
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-
     if player.get("last_bonus") == today:
-        send(peer_id, "Бонус уже получен сегодня. Возвращайся завтра!")
+        send(peer_id, "Бонус уже получен сегодня.")
         return
-
     if player.get("last_bonus") == yesterday:
         player["bonus_streak"] = player.get("bonus_streak", 0) + 1
     else:
         player["bonus_streak"] = 1
-
     player["last_bonus"] = today
     reward = 50 + min(player["bonus_streak"], 10) * 10
     player["balance"] += reward
     add_exp(player, 1)
     db.save_player(player)
+    send(peer_id, f"Ежедневный бонус: +{reward} монет!\nСерия: {player['bonus_streak']} дн.")
 
-    send(
-        peer_id,
-        f"Ежедневный бонус: +{reward} монет!\nСерия входов: {player['bonus_streak']} дн.",
-    )
-
-
-# ==================== ДУЭЛЬ С БОТОМ ====================
 def get_player_damage(player):
-    base_damage = random.randint(12, 25)
-    equipped = db.get_equipment(player["user_id"])
-    weapon_id = equipped.get("weapon")
-    if weapon_id and weapon_id in ITEMS:
-        base_damage += ITEMS[weapon_id]["effect"].get("damage", 0)
-    return base_damage
-
+    base = random.randint(12, 25)
+    eq = db.get_equipment(player["user_id"])
+    if eq.get("weapon") and eq["weapon"] in ITEMS:
+        base += ITEMS[eq["weapon"]]["effect"].get("damage", 0)
+    return base
 
 def get_player_defense(player):
     defense = 0
-    equipped = db.get_equipment(player["user_id"])
-    armor_id = equipped.get("armor")
-    if armor_id and armor_id in ITEMS:
-        defense += ITEMS[armor_id]["effect"].get("defense", 0)
+    eq = db.get_equipment(player["user_id"])
+    if eq.get("armor") and eq["armor"] in ITEMS:
+        defense += ITEMS[eq["armor"]]["effect"].get("defense", 0)
     return defense
 
-
 def play_duel_vs_bot(player, peer_id):
-    player_hp = 100
-    bot_hp = 100
-    log = []
-
-    for round_number in range(1, 6):
-        player_damage = get_player_damage(player)
-        bot_damage = max(0, random.randint(12, 25) - get_player_defense(player))
-
-        bot_hp -= player_damage
-        player_hp -= bot_damage
-
-        log.append(f"Раунд {round_number}: ты {player_damage}, бот {bot_damage}")
-        if bot_hp <= 0 or player_hp <= 0:
-            break
-
-    if bot_hp <= 0 and player_hp > 0:
+    hp1, hp2, log = 100, 100, []
+    for r in range(1, 6):
+        d1, d2 = get_player_damage(player), max(0, random.randint(12, 25) - get_player_defense(player))
+        hp2 -= d1; hp1 -= d2
+        log.append(f"Раунд {r}: ты {d1}, бот {d2}")
+        if hp1 <= 0 or hp2 <= 0: break
+    
+    if hp2 <= 0 and hp1 > 0:
         reward = random.randint(30, 70)
         player["balance"] += reward
         add_exp(player, 3)
         db.save_player(player)
-        result = f"Победа! Награда: {reward} монет."
-    elif player_hp <= 0 and bot_hp > 0:
-        add_exp(player, 1)
-        db.save_player(player)
-        result = "Поражение. Попробуй ещё раз."
+        db.update_daily_progress(player["user_id"], "duels", 1)
+        achs = db.check_achievements_on_action(player["user_id"], player, "duel_win")
+        ach_msg = "\n🏆 Достижение: " + ", ".join(achs) if achs else ""
+        send(peer_id, f"Победа! +{reward} монет.{ach_msg}")
     else:
         add_exp(player, 1)
         db.save_player(player)
-        result = "Ничья."
+        db.update_daily_progress(player["user_id"], "duels", 1)
+        send(peer_id, "Поражение или ничья. Попробуй ещё раз.")
 
-    send(peer_id, "Дуэль с ботом:\n" + "\n".join(log[-3:]) + "\n\n" + result)
-
-
-# ==================== PvP ДУЭЛИ ====================
 def parse_user_id_from_mention(text):
     import re
-    m = re.search(r'\[id(\d+)', text)
-    if m:
-        return int(m.group(1))
-    m = re.search(r'@id(\d+)', text)
-    if m:
-        return int(m.group(1))
-    m = re.search(r'(\d{5,10})', text)
-    if m:
-        return int(m.group(1))
-    return None
-
+    m = re.search(r'\[id(\d+)', text) or re.search(r'@id(\d+)', text) or re.search(r'(\d{5,10})', text)
+    return int(m.group(1)) if m else None
 
 def challenge_player(challenger_id, challenged_id, challenger_peer_id):
     if challenged_id == challenger_id:
-        send(challenger_peer_id, "Нельзя вызвать самого себя на дуэль!")
+        send(challenger_peer_id, "Нельзя вызвать самого себя!")
         return
-
-    # Проверяем существует ли игрок
     challenged = db.get_player(challenged_id, get_name)
-    if challenged is None:
-        send(challenger_peer_id, "Этот игрок ещё не начинал игру. Пусть сначала напишет боту 'старт'.")
+    if not challenged:
+        send(challenger_peer_id, "Этот игрок ещё не начинал игру.")
         return
-
     existing = db.get_duel(challenged_id)
-    if existing:
-        if time.time() - existing["timestamp"] < DUEL_TIMEOUT_SECONDS:
-            send(challenger_peer_id, "Этот игрок уже получил вызов. Подождите, пока он ответит.")
-            return
-
+    if existing and time.time() - existing["timestamp"] < DUEL_TIMEOUT_SECONDS:
+        send(challenger_peer_id, "Этот игрок уже получил вызов.")
+        return
     db.save_duel(challenged_id, challenger_id, challenger_peer_id, time.time())
-
     challenger = db.get_player(challenger_id, get_name)
-
-    send(challenger_peer_id, f"Вы вызвали {challenged['name']} на дуэль! Ждём ответа...")
-
+    send(challenger_peer_id, f"Вы вызвали {challenged['name']} на дуэль!")
     if challenged.get("last_peer_id"):
-        send(challenged["last_peer_id"],
-             f"⚔️ {challenger['name']} вызывает вас на дуэль!\nНапишите: принять\nИли: отклонить")
-    else:
-        send(challenger_peer_id, "Но игрок ещё не писал боту — он не получит уведомление.")
-
+        send(challenged["last_peer_id"], f"⚔️ {challenger['name']} вызывает вас!\nНапишите: принять")
 
 def accept_duel(challenged_id, challenged_peer_id):
     challenge = db.get_duel(challenged_id)
     if not challenge:
-        send(challenged_peer_id, "У вас нет активных вызовов на дуэль.")
+        send(challenged_peer_id, "Нет активных вызовов.")
         return
-
     if time.time() - challenge["timestamp"] >= DUEL_TIMEOUT_SECONDS:
         db.delete_duel(challenged_id)
-        send(challenged_peer_id, "Вызов истёк. Попросите вызвать вас снова.")
+        send(challenged_peer_id, "Вызов истёк.")
         return
-
-    challenger_id = challenge["challenger_id"]
-    challenger_peer_id = challenge["challenger_peer_id"]
-
     db.delete_duel(challenged_id)
-
-    send(challenged_peer_id, "Вы приняли вызов! Начинается дуэль...")
-    send(challenger_peer_id, "Соперник принял вызов! Начинается дуэль...")
-
-    player1 = db.get_player(challenger_id, get_name)
-    player2 = db.get_player(challenged_id, get_name)
-
-    play_pvp_duel(player1, player2, challenger_peer_id, challenged_peer_id)
-
+    send(challenged_peer_id, "Вы приняли вызов!")
+    send(challenge["challenger_peer_id"], "Соперник принял вызов!")
+    p1 = db.get_player(challenge["challenger_id"], get_name)
+    p2 = db.get_player(challenged_id, get_name)
+    play_pvp_duel(p1, p2, challenge["challenger_peer_id"], challenged_peer_id)
 
 def decline_duel(challenged_id, challenged_peer_id):
     challenge = db.get_duel(challenged_id)
-    if not challenge:
-        send(challenged_peer_id, "У вас нет активных вызовов на дуэль.")
-        return
-
-    challenger_id = challenge["challenger_id"]
-    challenger_peer_id = challenge["challenger_peer_id"]
-
+    if not challenge: return
     db.delete_duel(challenged_id)
+    send(challenged_peer_id, "Вы отклонили вызов.")
+    send(challenge["challenger_peer_id"], f"{db.get_player(challenged_id, get_name)['name']} отклонил вызов.")
 
-    challenger = db.get_player(challenger_id, get_name)
-    send(challenged_peer_id, "Вы отклонили вызов на дуэль.")
-    send(challenger_peer_id, f"{challenger['name']} отклонил ваш вызов на дуэль.")
-
-
-def play_pvp_duel(player1, player2, peer1_id, peer2_id):
-    hp1 = 100
-    hp2 = 100
-    log = []
-
-    for round_number in range(1, 8):
-        if hp1 <= 0 or hp2 <= 0:
-            break
-
-        dmg1 = get_player_damage(player1)
-        dmg2 = get_player_damage(player2)
-        def1 = get_player_defense(player1)
-        def2 = get_player_defense(player2)
-
-        actual_dmg1 = max(3, dmg1 - def2)
-        actual_dmg2 = max(3, dmg2 - def1)
-
-        hp2 -= actual_dmg1
-        hp1 -= actual_dmg2
-
-        log.append(f"Раунд {round_number}: {player1['name']} -{actual_dmg1}, {player2['name']} -{actual_dmg2}")
-
+def play_pvp_duel(p1, p2, peer1, peer2):
+    hp1, hp2, log = 100, 100, []
+    for r in range(1, 8):
+        if hp1 <= 0 or hp2 <= 0: break
+        d1, d2 = get_player_damage(p1), get_player_damage(p2)
+        def1, def2 = get_player_defense(p1), get_player_defense(p2)
+        ad1, ad2 = max(3, d1 - def2), max(3, d2 - def1)
+        hp2 -= ad1; hp1 -= ad2
+        log.append(f"Раунд {r}: {p1['name']} -{ad1}, {p2['name']} -{ad2}")
+    
     if hp1 > 0 and hp2 <= 0:
         reward = random.randint(50, 100)
-        player1["balance"] += reward
-        add_exp(player1, 5)
-        add_exp(player2, 2)
-        db.save_player(player1)
-        db.save_player(player2)
-        result = f"🏆 Победил {player1['name']}! Награда: {reward} монет."
+        p1["balance"] += reward
+        add_exp(p1, 5); add_exp(p2, 2)
+        db.save_player(p1); db.save_player(p2)
+        db.update_daily_progress(p1["user_id"], "duels", 1)
+        achs = db.check_achievements_on_action(p1["user_id"], p1, "duel_win")
+        res = f"🏆 Победил {p1['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     elif hp2 > 0 and hp1 <= 0:
         reward = random.randint(50, 100)
-        player2["balance"] += reward
-        add_exp(player2, 5)
-        add_exp(player1, 2)
-        db.save_player(player1)
-        db.save_player(player2)
-        result = f"🏆 Победил {player2['name']}! Награда: {reward} монет."
+        p2["balance"] += reward
+        add_exp(p2, 5); add_exp(p1, 2)
+        db.save_player(p1); db.save_player(p2)
+        db.update_daily_progress(p2["user_id"], "duels", 1)
+        achs = db.check_achievements_on_action(p2["user_id"], p2, "duel_win")
+        res = f"🏆 Победил {p2['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     else:
-        add_exp(player1, 2)
-        add_exp(player2, 2)
-        db.save_player(player1)
-        db.save_player(player2)
-        result = "Ничья. Оба получают опыт."
+        add_exp(p1, 2); add_exp(p2, 2)
+        db.save_player(p1); db.save_player(p2)
+        res = "Ничья."
+    
+    msg = f"⚔️ PvP дуэль:\n" + "\n".join(log[-5:]) + f"\n\n{res}"
+    send(peer1, msg)
+    if peer2 != peer1: send(peer2, msg)
 
-    duel_log = "\n".join(log[-5:])
-    result_message = f"⚔️ PvP дуэль:\n{duel_log}\n\n{result}"
-
-    send(peer1_id, result_message)
-    if peer2_id != peer1_id:
-        send(peer2_id, result_message)
-
-
-# ==================== БОСС ====================
 def start_boss_fight(user_id, peer_id):
-    boss_data = db.get_boss()
-
-    if boss_data and boss_data.get("active"):
-        if boss_data.get("start_time") and (time.time() - boss_data["start_time"]) > BOSS_TIMEOUT_SECONDS:
+    boss = db.get_boss()
+    if boss and boss.get("active"):
+        if boss.get("start_time") and (time.time() - boss["start_time"]) > BOSS_TIMEOUT_SECONDS:
             db.clear_boss()
-            send(peer_id, "Предыдущий бой истёк. Начинаем нового босса!")
             return create_new_boss(user_id, peer_id)
-
-        # Проверяем, участвует ли уже
-        participants = boss_data.get("participants", [])
-        if any(p["player_id"] == user_id for p in participants):
-            send(peer_id, "Ты уже участвуешь в бою! Пиши 'атака' чтобы бить.")
+        if any(p["player_id"] == user_id for p in boss.get("participants", [])):
+            send(peer_id, "Ты уже участвуешь! Пиши 'атака'.")
             return
-
         player = db.get_player(user_id, get_name)
-        boss_data["participants"].append({
-            "player_id": user_id,
-            "name": player["name"],
-            "damage": 0,
-            "peer_id": peer_id,
-        })
-        db.save_boss(boss_data)
-
-        boss_name = BOSS_LEVELS[boss_data["level"]]["name"]
-        send(peer_id, f"Ты присоединился к бою с {boss_name}!\nHP босса: {boss_data['current_hp']}/{boss_data['max_hp']}\nПиши 'атака' чтобы атаковать.")
+        boss["participants"].append({"player_id": user_id, "name": player["name"], "damage": 0, "peer_id": peer_id})
+        db.save_boss(boss)
+        send(peer_id, f"Ты присоединился к бою с {boss['name']}!\nHP: {boss['current_hp']}/{boss['max_hp']}")
         return
-
     create_new_boss(user_id, peer_id)
-
 
 def create_new_boss(user_id, peer_id):
     player = db.get_player(user_id, get_name)
-
-    player_level = player.get("level", 1)
-    if player_level <= 2:
-        boss_level = 1
-    elif player_level <= 5:
-        boss_level = 2
-    elif player_level <= 10:
-        boss_level = 3
-    elif player_level <= 15:
-        boss_level = 4
-    else:
-        boss_level = 5
-
-    boss = BOSS_LEVELS[boss_level]
-
-    boss_data = {
-        "active": True,
-        "level": boss_level,
-        "name": boss["name"],
-        "max_hp": boss["hp"],
-        "current_hp": boss["hp"],
-        "attack": boss["attack"],
-        "defense": boss["defense"],
-        "start_time": time.time(),
-        "participants": [
-            {
-                "player_id": user_id,
-                "name": player["name"],
-                "damage": 0,
-                "peer_id": peer_id,
-            }
-        ],
-    }
-
-    db.save_boss(boss_data)
-
-    send(peer_id,
-         f"👹 {boss['name']} (ур. {boss_level}) появился!\n"
-         f"HP: {boss['hp']}\n"
-         f"Атака: {boss['attack']}\n"
-         f"Защита: {boss['defense']}\n\n"
-         f"Пиши 'атака' чтобы бить!\n"
-         f"Другие могут присоединиться командой 'босс'")
-
+    lvl = 1 if player.get("level", 1) <= 2 else 2 if player.get("level", 1) <= 5 else 3 if player.get("level", 1) <= 10 else 4 if player.get("level", 1) <= 15 else 5
+    boss = BOSS_LEVELS[lvl]
+    data = {"active": True, "level": lvl, "name": boss["name"], "max_hp": boss["hp"], "current_hp": boss["hp"],
+            "attack": boss["attack"], "defense": boss["defense"], "start_time": time.time(),
+            "participants": [{"player_id": user_id, "name": player["name"], "damage": 0, "peer_id": peer_id}]}
+    db.save_boss(data)
+    send(peer_id, f"👹 {boss['name']} (ур. {lvl}) появился!\nHP: {boss['hp']}\nПиши 'атака'!")
 
 def attack_boss(user_id, peer_id):
-    boss_data = db.get_boss()
-
-    if not boss_data or not boss_data.get("active"):
-        send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
+    boss = db.get_boss()
+    if not boss or not boss.get("active"):
+        send(peer_id, "Нет активного боя. Напиши 'босс'.")
         return
-
-    if boss_data.get("start_time") and (time.time() - boss_data["start_time"]) > BOSS_TIMEOUT_SECONDS:
+    if boss.get("start_time") and (time.time() - boss["start_time"]) > BOSS_TIMEOUT_SECONDS:
         db.clear_boss()
-        send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
+        send(peer_id, "Бой истёк.")
         return
-
-    participants = boss_data.get("participants", [])
-    participant = next((p for p in participants if p["player_id"] == user_id), None)
-    if not participant:
-        send(peer_id, "Ты не участвуешь в этом бою! Напиши 'босс' чтобы присоединиться.")
+    p = next((x for x in boss.get("participants", []) if x["player_id"] == user_id), None)
+    if not p:
+        send(peer_id, "Ты не участвуешь! Напиши 'босс'.")
         return
-
     player = db.get_player(user_id, get_name)
-    boss_name = boss_data["name"]
-    boss_defense = boss_data.get("defense", 0)
+    dmg = max(1, get_player_damage(player) - boss.get("defense", 0))
+    boss["current_hp"] -= dmg
+    p["damage"] += dmg
+    boss_dmg = max(1, boss.get("attack", 10) - get_player_defense(player))
+    db.save_boss(boss)
+    send(peer_id, f"Ты нанёс {dmg} урона {boss['name']}!\nHP: {max(0, boss['current_hp'])}/{boss['max_hp']}\nБосс атакует на {boss_dmg}.")
+    if boss["current_hp"] <= 0:
+        defeat_boss(boss)
 
-    damage = get_player_damage(player)
-    actual_damage = max(1, damage - boss_defense)
-
-    boss_data["current_hp"] -= actual_damage
-    participant["damage"] += actual_damage
-
-    boss_attack = boss_data.get("attack", 10)
-    player_defense = get_player_defense(player)
-    boss_damage = max(1, boss_attack - player_defense)
-
-    db.save_boss(boss_data)
-
-    send(peer_id, f"Ты нанёс {actual_damage} урона {boss_name}!\n"
-         f"HP босса: {max(0, boss_data['current_hp'])}/{boss_data['max_hp']}\n"
-         f"Босс атакует тебя на {boss_damage} урона.")
-
-    if boss_data["current_hp"] <= 0:
-        defeat_boss(boss_data)
-
-
-def defeat_boss(boss_data):
-    boss_level = boss_data["level"]
-    base_reward = BOSS_LEVELS[boss_level]["reward"]
-    base_exp = BOSS_LEVELS[boss_level]["exp"]
-
-    total_damage = sum(p["damage"] for p in boss_data["participants"])
-
-    messages = [f" {boss_data['name']} повержен!\n\nНаграды:\n"]
-
-    for p in boss_data["participants"]:
-        if total_damage > 0:
-            share = p["damage"] / total_damage
-        else:
-            share = 1 / len(boss_data["participants"])
-
-        reward = int(base_reward * share)
-        exp = int(base_exp * share)
-
-        player = db.get_player(p["player_id"], get_name)
-        player["balance"] += reward
-        add_exp(player, exp)
-        db.save_player(player)
-
-        messages.append(f"{p['name']}: +{reward} монет, +{exp} опыта\n"
-                       f"   (нанёс {p['damage']} урона)")
-
-    boss_data["active"] = False
-    db.save_boss(boss_data)
-
-    for p in boss_data["participants"]:
-        send(p["peer_id"], "\n".join(messages))
-
+def defeat_boss(boss):
+    total_dmg = sum(p["damage"] for p in boss["participants"])
+    msgs = [f"👹 {boss['name']} повержен!\n\nНаграды:"]
+    for p in boss["participants"]:
+        share = p["damage"] / total_dmg if total_dmg > 0 else 1 / len(boss["participants"])
+        reward = int(BOSS_LEVELS[boss["level"]]["reward"] * share)
+        exp = int(BOSS_LEVELS[boss["level"]]["exp"] * share)
+        pl = db.get_player(p["player_id"], get_name)
+        pl["balance"] += reward
+        add_exp(pl, exp)
+        db.save_player(pl)
+        db.update_daily_progress(p["player_id"], "boss", 1)
+        achs = db.check_achievements_on_action(p["player_id"], pl, "boss_kill")
+        ach_msg = " 🏆 " + ", ".join(achs) if achs else ""
+        msgs.append(f"{p['name']}: +{reward}💰, +{exp}⭐ (урон: {p['damage']}){ach_msg}")
+    boss["active"] = False
+    db.save_boss(boss)
+    for p in boss["participants"]:
+        send(p["peer_id"], "\n".join(msgs))
 
 def show_boss_status(user_id, peer_id):
-    boss_data = db.get_boss()
-
-    if not boss_data or not boss_data.get("active"):
-        send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
+    boss = db.get_boss()
+    if not boss or not boss.get("active"):
+        send(peer_id, "Нет активного боя.")
         return
-
-    if boss_data.get("start_time") and (time.time() - boss_data["start_time"]) > BOSS_TIMEOUT_SECONDS:
-        send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
-        return
-
-    lines = [
-        f"👹 {boss_data['name']} (ур. {boss_data['level']})",
-        f"HP: {boss_data['current_hp']}/{boss_data['max_hp']}",
-        f"Атака: {boss_data.get('attack', 0)}",
-        f"Защита: {boss_data.get('defense', 0)}",
-        "",
-        f"Участников: {len(boss_data.get('participants', []))}",
-    ]
-
-    for p in boss_data.get("participants", []):
+    lines = [f"👹 {boss['name']} (ур. {boss['level']})", f"HP: {boss['current_hp']}/{boss['max_hp']}", f"Участников: {len(boss.get('participants', []))}"]
+    for p in boss.get("participants", []):
         if p["player_id"] == user_id:
             lines.append(f"Твой урон: {p['damage']}")
-            break
-
     send(peer_id, "\n".join(lines))
 
-
 def leave_boss_fight(user_id, peer_id):
-    boss_data = db.get_boss()
-
-    if not boss_data or not boss_data.get("active"):
-        send(peer_id, "Ты не участвуешь в бою.")
-        return
-
-    participants = boss_data.get("participants", [])
-    participant = next((p for p in participants if p["player_id"] == user_id), None)
-    if not participant:
-        send(peer_id, "Ты не участвуешь в этом бою.")
-        return
-
-    boss_data["participants"] = [p for p in participants if p["player_id"] != user_id]
-    db.save_boss(boss_data)
-
-    send(peer_id, "Ты покинул бой с боссом.")
+    boss = db.get_boss()
+    if not boss or not boss.get("active"): return
+    boss["participants"] = [p for p in boss.get("participants", []) if p["player_id"] != user_id]
+    db.save_boss(boss)
+    send(peer_id, "Ты покинул бой.")
 
 
-# ==================== ОБРАБОТЧИК КОМАНД ====================
+# ==================== ОБРАБОТЧИК ====================
 def handle(user_id, peer_id, text):
     player = db.get_player(user_id, get_name)
     player["last_peer_id"] = peer_id
     db.save_player(player)
-
+    player = db.check_and_reset_daily_quests(player)
     command = text.lower().strip()
+    if not command: return
 
-    if not command:
-        return
-
-    if command in ["старт", "start", "/start", "!start", "помощь", "help"]:
+    if command in ["старт", "start", "/start", "помощь", "help"]:
         send(peer_id, f"{player['name']}, добро пожаловать!\n\n{HELP_TEXT}")
         return
-
-    if command in ["баланс", "balance", "!баланс"]:
+    if command in ["баланс", "balance"]:
         send(peer_id, f"Баланс: {player['balance']} монет.")
+        db.check_achievements_on_action(user_id, player, "rich")
         return
-
-    if command in ["id", "айди", "мой id"]:
-        send(peer_id, f"Твой ID: {user_id}\nИспользуй его для вызова: вызов @id{user_id}")
+    if command in ["id", "айди"]:
+        send(peer_id, f"Твой ID: {user_id}")
         return
-
-    if command in ["работа", "work", "!работа"]:
+    if command in ["работа", "work"]:
         now = int(time.time())
-        wait_seconds = WORK_COOLDOWN_SECONDS - (now - player.get("last_work", 0))
-        if wait_seconds > 0:
-            send(peer_id, f"Отдохни ещё {wait_seconds} сек.")
+        wait = WORK_COOLDOWN_SECONDS - (now - player.get("last_work", 0))
+        if wait > 0:
+            send(peer_id, f"Отдохни ещё {wait} сек.")
             return
         earned = random.randint(20, 80)
         player["balance"] += earned
         player["last_work"] = now
-        level_up = add_exp(player, 2)
+        add_exp(player, 2)
         db.save_player(player)
-        message = f"{player['name']}, ты заработал(а) {earned} монет."
-        if level_up:
-            message += f"\nНовый уровень: {player['level']}!"
-        send(peer_id, message)
+        db.update_daily_progress(user_id, "coins", earned)
+        db.check_achievements_on_action(user_id, player, "rich")
+        send(peer_id, f"Ты заработал {earned} монет.")
         return
-
     if command.startswith("ставка "):
         parts = command.split()
-        if len(parts) != 2:
-            send(peer_id, "Формат: ставка 50")
-            return
-        try:
-            amount = int(parts[1])
-        except ValueError:
-            send(peer_id, "Ставка должна быть числом.")
-            return
-        if amount < MIN_BET:
-            send(peer_id, f"Минимальная ставка: {MIN_BET} монет.")
-            return
-        if amount > player["balance"]:
-            send(peer_id, "Недостаточно монет.")
+        if len(parts) != 2: return
+        try: amount = int(parts[1])
+        except ValueError: return
+        if amount < MIN_BET or amount > player["balance"]:
+            send(peer_id, "Недостаточно монет или ставка слишком мала.")
             return
         player["balance"] -= amount
         if random.random() < 0.45:
             prize = amount * 2
             player["balance"] += prize
-            message = f"Выигрыш! Ты получаешь {prize} монет."
+            db.update_daily_progress(user_id, "coins", prize)
+            msg = f"Выигрыш! +{prize} монет."
         else:
-            message = f"Не повезло. Ты потерял(а) {amount} монет."
+            msg = f"Не повезло. -{amount} монет."
         add_exp(player, 1)
         db.save_player(player)
-        send(peer_id, message)
+        db.check_achievements_on_action(user_id, player, "rich")
+        send(peer_id, msg)
         return
-
-    if command in ["дуэль", "duel", "!дуэль"]:
+    if command in ["дуэль", "duel"]:
         play_duel_vs_bot(player, peer_id)
         return
-
-    if command in ["бонус", "bonus", "!бонус", "ежедневный бонус"]:
+    if command in ["бонус", "bonus"]:
         claim_daily_bonus(player, peer_id)
         return
-
-    if command in ["топ", "top", "!топ", "рейтинг", "rating"]:
+    if command in ["топ", "top"]:
         show_top(peer_id)
         return
-
-    if command in ["профиль", "profile", "!профиль"]:
-        equipped = db.get_equipment(player["user_id"])
-        cosmetic = ""
-        cid = equipped.get("cosmetic")
-        if cid and cid in ITEMS:
-            cosmetic = f"\nУкрашение: {ITEM_EMOJI.get(cid, '')} {ITEMS[cid]['name']}"
-        send(
-            peer_id,
-            "Профиль\n\n"
-            f"Имя: {player['name']}\n"
-            f"Уровень: {player['level']}\n"
-            f"Опыт: {player['exp']}\n"
-            f"Баланс: {player['balance']} монет\n"
-            f"Серия бонусов: {player.get('bonus_streak', 0)} дн."
-            f"{cosmetic}",
-        )
+    if command in ["профиль", "profile"]:
+        eq = db.get_equipment(player["user_id"])
+        cos = f"\nУкрашение: {ITEM_EMOJI.get(eq['cosmetic'], '')} {ITEMS[eq['cosmetic']]['name']}" if eq.get("cosmetic") and eq["cosmetic"] in ITEMS else ""
+        send(peer_id, f"Профиль\n\nИмя: {player['name']}\nУровень: {player['level']}\nОпыт: {player['exp']}\nБаланс: {player['balance']}\nСерия бонусов: {player.get('bonus_streak', 0)} дн.{cos}")
         return
-
-    if command in ["магазин", "shop", "!магазин"]:
+    if command in ["магазин", "shop"]:
         show_shop(peer_id)
         return
-
-    if command in ["инвентарь", "inv", "!инвентарь", "inventory"]:
+    if command in ["инвентарь", "inv"]:
         show_inventory(player, peer_id)
         return
-
     if command.startswith("купить "):
-        parts = command.split()
-        if len(parts) != 2:
-            send(peer_id, "Формат: купить 1")
-            return
-        buy_item(player, peer_id, parts[1])
+        buy_item(player, peer_id, command.split()[1])
         return
-
-    if command.startswith("использовать ") or command.startswith("use "):
-        parts = command.split()
-        if len(parts) != 2:
-            send(peer_id, "Формат: использовать 1")
-            return
-        use_item(player, peer_id, parts[1])
+    if command.startswith("экипировать ") or command.startswith("использовать "):
+        use_item(player, peer_id, command.split()[1])
         return
-
-    if command.startswith("экипировать ") or command.startswith("equip "):
-        parts = command.split()
-        if len(parts) != 2:
-            send(peer_id, "Формат: экипировать 2")
-            return
-        use_item(player, peer_id, parts[1])
+    if command.startswith("вызов ") or command.startswith("pvp "):
+        opp = parse_user_id_from_mention(text)
+        if opp: challenge_player(user_id, opp, peer_id)
         return
-
-    # === PvP команды ===
-    if command.startswith("вызов ") or command.startswith("pvp ") or command.startswith("дуэль @"):
-        opponent_id = parse_user_id_from_mention(text)
-        if opponent_id is None:
-            send(peer_id, "Не удалось определить ID. Формат: вызов @id123456")
-            return
-        challenge_player(user_id, opponent_id, peer_id)
-        return
-
     if command in ["принять", "accept"]:
         accept_duel(user_id, peer_id)
         return
-
-    if command in ["отклонить", "decline", "отмена"]:
+    if command in ["отклонить", "decline"]:
         decline_duel(user_id, peer_id)
         return
-
-    # === Босс команды ===
-    if command in ["босс", "boss", "!босс"]:
+    if command in ["босс", "boss"]:
         start_boss_fight(user_id, peer_id)
         return
-
-    if command in ["атака", "attack", "удар", "hit", "бить"]:
+    if command in ["атака", "attack", "удар"]:
         attack_boss(user_id, peer_id)
         return
-
-    if command in ["статус", "status", "босс статус"]:
+    if command in ["статус", "status"]:
         show_boss_status(user_id, peer_id)
         return
-
-    if command in ["сдаться", "leave", "выйти"]:
+    if command in ["сдаться", "leave"]:
         leave_boss_fight(user_id, peer_id)
+        return
+    
+    # === НОВЫЕ КОМАНДЫ: КВЕСТЫ И ДОСТИЖЕНИЯ ===
+    if command in ["квесты", "задания", "quests"]:
+        send(peer_id, db.get_daily_quests_status(player))
+        return
+    if command in ["выполнить квесты", "claim quests"]:
+        success, msg = db.claim_daily_quests(player)
+        send(peer_id, msg)
+        return
+    if command in ["достижения", "achievements"]:
+        send(peer_id, db.get_achievements_list(user_id))
         return
 
     # Неизвестная команда — молчим
