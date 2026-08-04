@@ -24,7 +24,7 @@ BOSS_FILE = os.path.join(BASE_DIR, "boss.json")
 WORK_COOLDOWN_SECONDS = 60
 MIN_BET = 10
 DUEL_TIMEOUT_SECONDS = 300
-BOSS_TIMEOUT_SECONDS = 300  # 5 минут на бой с боссом
+BOSS_TIMEOUT_SECONDS = 600  # 10 минут для тестов
 
 session = VkApi(token=TOKEN)
 api = session.get_api()
@@ -71,8 +71,11 @@ players = load_players()
 
 
 def save_players():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(players, f, ensure_ascii=False, indent=2)
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(players, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Ошибка сохранения players.json: {e}")
 
 
 def load_duels():
@@ -86,23 +89,40 @@ def load_duels():
 
 
 def save_duels(duels):
-    with open(DUELS_FILE, "w", encoding="utf-8") as f:
-        json.dump(duels, f, ensure_ascii=False, indent=2)
+    try:
+        with open(DUELS_FILE, "w", encoding="utf-8") as f:
+            json.dump(duels, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Ошибка сохранения duels.json: {e}")
 
 
 def load_boss():
     if os.path.exists(BOSS_FILE):
         try:
             with open(BOSS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
+                data = json.load(f)
+                print(f"[DEBUG load_boss] загружено: {data}")
+                return data
+        except Exception as e:
+            print(f"[DEBUG load_boss] ошибка чтения: {e}")
             return {}
+    print(f"[DEBUG load_boss] файл не существует")
     return {}
 
 
 def save_boss(boss_data):
-    with open(BOSS_FILE, "w", encoding="utf-8") as f:
-        json.dump(boss_data, f, ensure_ascii=False, indent=2)
+    try:
+        print(f"[DEBUG save_boss] сохраняем: {boss_data}")
+        with open(BOSS_FILE, "w", encoding="utf-8") as f:
+            json.dump(boss_data, f, ensure_ascii=False, indent=2)
+        print(f"[DEBUG save_boss] сохранено успешно")
+        
+        # Проверяем что записалось
+        with open(BOSS_FILE, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        print(f"[DEBUG save_boss] проверочная загрузка: {saved}")
+    except Exception as e:
+        print(f"[DEBUG save_boss] ОШИБКА: {e}")
 
 
 # ==================== ИГРОКИ ====================
@@ -542,13 +562,27 @@ def play_pvp_duel(player1, player2, peer1_id, peer2_id):
 # ==================== БОСС ====================
 def start_boss_fight(user_id, peer_id):
     """Начать или присоединиться к бою с боссом"""
+    print(f"[DEBUG start_boss] вызван для user_id={user_id}, peer_id={peer_id}")
     boss_data = load_boss()
+    print(f"[DEBUG start_boss] boss_data после загрузки: {boss_data}")
 
     # Проверяем, есть ли активный бой
-    if boss_data.get("active"):
-        # Проверяем таймаут
-        if time.time() - boss_data.get("start_time", 0) > BOSS_TIMEOUT_SECONDS:
-            # Таймаут истёк — сбрасываем
+    if boss_data and boss_data.get("active"):
+        start_time = boss_data.get("start_time")
+        print(f"[DEBUG start_boss] start_time: {start_time}")
+        
+        if start_time is None:
+            print("[DEBUG start_boss] start_time отсутствует, сбрасываем")
+            boss_data = {}
+            save_boss(boss_data)
+            send(peer_id, "Ошибка состояния босса. Начинаем нового!")
+            return create_new_boss(user_id, peer_id)
+        
+        elapsed = time.time() - start_time
+        print(f"[DEBUG start_boss] прошло секунд: {elapsed}")
+        
+        if elapsed > BOSS_TIMEOUT_SECONDS:
+            print(f"[DEBUG start_boss] таймаут истёк ({elapsed} > {BOSS_TIMEOUT_SECONDS})")
             boss_data = {}
             save_boss(boss_data)
             send(peer_id, "Предыдущий бой истёк. Начинаем нового босса!")
@@ -573,6 +607,7 @@ def start_boss_fight(user_id, peer_id):
         return
 
     # Начинаем новый бой
+    print("[DEBUG start_boss] создаём нового босса")
     create_new_boss(user_id, peer_id)
 
 
@@ -613,6 +648,7 @@ def create_new_boss(user_id, peer_id):
         },
     }
     
+    print(f"[DEBUG create_new_boss] создаём босса: {boss_data}")
     save_boss(boss_data)
     
     send(peer_id, 
@@ -625,31 +661,31 @@ def create_new_boss(user_id, peer_id):
 
 
 def attack_boss(user_id, peer_id):
+    print(f"[DEBUG attack_boss] вызван для user_id={user_id}")
     boss_data = load_boss()
-    
-    # === ОТЛАДКА ===
-    print(f"[BOSS DEBUG] attack_boss called")
-    print(f"[BOSS DEBUG] boss_data: {boss_data}")
-    print(f"[BOSS DEBUG] current_time: {time.time()}")
-    print(f"[BOSS DEBUG] start_time: {boss_data.get('start_time', 'NOT SET')}")
-    if boss_data.get('start_time'):
-        elapsed = time.time() - boss_data.get('start_time', 0)
-        print(f"[BOSS DEBUG] elapsed time: {elapsed} seconds")
-    # ===============
+    print(f"[DEBUG attack_boss] boss_data: {boss_data}")
 
-    if not boss_data.get("active"):
+    if not boss_data or not boss_data.get("active"):
         send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
         return
 
-    # Проверяем таймаут
-    if time.time() - boss_data.get("start_time", 0) > BOSS_TIMEOUT_SECONDS:
+    start_time = boss_data.get("start_time")
+    if start_time is None:
+        print("[DEBUG attack_boss] start_time отсутствует!")
+        send(peer_id, "Ошибка состояния босса. Напиши 'босс' чтобы начать нового.")
+        return
+
+    elapsed = time.time() - start_time
+    print(f"[DEBUG attack_boss] прошло секунд: {elapsed}")
+
+    if elapsed > BOSS_TIMEOUT_SECONDS:
+        print(f"[DEBUG attack_boss] таймаут истёк")
         boss_data = {}
         save_boss(boss_data)
         send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
         return
 
-    # Проверяем, участник ли
-    if str(user_id) not in boss_data["participants"]:
+    if str(user_id) not in boss_data.get("participants", {}):
         send(peer_id, "Ты не участвуешь в этом бою! Напиши 'босс' чтобы присоединиться.")
         return
 
@@ -657,40 +693,34 @@ def attack_boss(user_id, peer_id):
     boss_name = boss_data["name"]
     boss_defense = boss_data.get("defense", 0)
     
-    # Считаем урон
     damage = get_player_damage(player)
     actual_damage = max(1, damage - boss_defense)
     
-    # Наносим урон
     boss_data["current_hp"] -= actual_damage
     boss_data["participants"][str(user_id)]["damage"] += actual_damage
     
-    # Босс атакует в ответ (случайный урон)
     boss_attack = boss_data.get("attack", 10)
     player_defense = get_player_defense(player)
     boss_damage = max(1, boss_attack - player_defense)
     
-    # Сохраняем
     save_boss(boss_data)
     
     send(peer_id, f"Ты нанёс {actual_damage} урона {boss_name}!\n"
          f"HP босса: {max(0, boss_data['current_hp'])}/{boss_data['max_hp']}\n"
          f"Босс атакует тебя на {boss_damage} урона.")
     
-    # Проверяем, не умер ли босс
     if boss_data["current_hp"] <= 0:
         defeat_boss(boss_data)
 
 
 def defeat_boss(boss_data):
-    """Босс побеждён — распределяем награды"""
     boss_level = boss_data["level"]
     base_reward = BOSS_LEVELS[boss_level]["reward"]
     base_exp = BOSS_LEVELS[boss_level]["exp"]
     
     total_damage = sum(p["damage"] for p in boss_data["participants"].values())
     
-    messages = [f" {boss_data['name']} повержен!\n\nНаграды:\n"]
+    messages = [f"👹 {boss_data['name']} повержен!\n\nНаграды:\n"]
     
     for participant_id, data in boss_data["participants"].items():
         if total_damage > 0:
@@ -712,23 +742,23 @@ def defeat_boss(boss_data):
     boss_data["active"] = False
     save_boss(boss_data)
     
-    # Отправляем всем участникам
     for participant_id, data in boss_data["participants"].items():
         peer_id = data.get("peer_id", int(participant_id))
         send(peer_id, "\n".join(messages))
 
 
 def show_boss_status(user_id, peer_id):
-    """Показать статус боя с боссом"""
     boss_data = load_boss()
 
-    if not boss_data.get("active"):
+    if not boss_data or not boss_data.get("active"):
         send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
         return
 
-    if time.time() - boss_data.get("start_time", 0) > BOSS_TIMEOUT_SECONDS:
-        send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
-        return
+    if boss_data.get("start_time"):
+        elapsed = time.time() - boss_data.get("start_time", 0)
+        if elapsed > BOSS_TIMEOUT_SECONDS:
+            send(peer_id, "Бой истёк. Напиши 'босс' чтобы начать нового.")
+            return
 
     lines = [
         f"👹 {boss_data['name']} (ур. {boss_data['level']})",
@@ -736,10 +766,10 @@ def show_boss_status(user_id, peer_id):
         f"Атака: {boss_data.get('attack', 0)}",
         f"Защита: {boss_data.get('defense', 0)}",
         "",
-        f"Участников: {len(boss_data['participants'])}",
+        f"Участников: {len(boss_data.get('participants', {}))}",
     ]
     
-    if str(user_id) in boss_data["participants"]:
+    if str(user_id) in boss_data.get("participants", {}):
         my_damage = boss_data["participants"][str(user_id)]["damage"]
         lines.append(f"Твой урон: {my_damage}")
     
@@ -747,14 +777,13 @@ def show_boss_status(user_id, peer_id):
 
 
 def leave_boss_fight(user_id, peer_id):
-    """Покинуть бой с боссом"""
     boss_data = load_boss()
 
-    if not boss_data.get("active"):
+    if not boss_data or not boss_data.get("active"):
         send(peer_id, "Ты не участвуешь в бою.")
         return
 
-    if str(user_id) not in boss_data["participants"]:
+    if str(user_id) not in boss_data.get("participants", {}):
         send(peer_id, "Ты не участвуешь в этом бою.")
         return
 
