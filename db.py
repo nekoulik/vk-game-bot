@@ -450,13 +450,28 @@ def save_boss(boss_data):
         )
 
         conn.execute("DELETE FROM boss_participants WHERE boss_id = 1")
-        for pid_str, pdata in boss_data.get("participants", {}).items():
-            conn.execute(
-                """INSERT INTO boss_participants
-                   (boss_id, player_id, name, damage, peer_id)
-                   VALUES (1, ?, ?, ?, ?)""",
-                (int(pid_str), pdata["name"], pdata["damage"], pdata["peer_id"]),
-            )
+        
+        # participants может быть списком или словарём
+        participants = boss_data.get("participants", [])
+        
+        if isinstance(participants, list):
+            # Новый формат: список словарей
+            for p in participants:
+                conn.execute(
+                    """INSERT INTO boss_participants
+                       (boss_id, player_id, name, damage, peer_id)
+                       VALUES (1, ?, ?, ?, ?)""",
+                    (p["player_id"], p["name"], p["damage"], p["peer_id"]),
+                )
+        elif isinstance(participants, dict):
+            # Старый формат из JSON: словарь {user_id: data}
+            for pid_str, pdata in participants.items():
+                conn.execute(
+                    """INSERT INTO boss_participants
+                       (boss_id, player_id, name, damage, peer_id)
+                       VALUES (1, ?, ?, ?, ?)""",
+                    (int(pid_str), pdata["name"], pdata["damage"], pdata["peer_id"]),
+                )
 
         conn.commit()
     finally:
