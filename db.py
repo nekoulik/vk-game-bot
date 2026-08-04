@@ -27,6 +27,15 @@ ACHIEVEMENTS = {
     "boss_slayer": {"name": "Истребитель", "desc": "Убить 3 боссов"},
 }
 
+# ==================== ПИТОМЦЫ ====================
+PETS = {
+    1: {"name": "Собака", "emoji": "", "price": 1000, "bonus_damage": 0.05, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0, "desc": "+5% к урону в дуэлях"},
+    2: {"name": "Кот", "emoji": "🐈", "price": 800, "bonus_damage": 0, "bonus_coins": 0.10, "bonus_exp": 0, "bonus_daily": 0, "desc": "+10% к монетам с работы"},
+    3: {"name": "Орёл", "emoji": "", "price": 1200, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+5% к опыту"},
+    4: {"name": "Дракон", "emoji": "", "price": 5000, "bonus_damage": 0.10, "bonus_coins": 0.05, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+10% урона, +5% монет, +5% опыта"},
+    5: {"name": "Кролик", "emoji": "🐰", "price": 600, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0.15, "desc": "+15% к ежедневному бонусу"},
+}
+
 
 def get_conn():
     conn = sqlite3.connect(DB_FILE, timeout=10)
@@ -41,7 +50,7 @@ def add_column_if_not_exists(conn, table, column, definition):
     try:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
     except sqlite3.OperationalError:
-        pass  # Колонка уже существует
+        pass
 
 
 def init_db():
@@ -75,6 +84,15 @@ def init_db():
                 armor INTEGER,
                 cosmetic INTEGER,
                 FOREIGN KEY (player_id) REFERENCES players(user_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS pets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_id INTEGER NOT NULL,
+                pet_id INTEGER NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 0,
+                acquired_at TEXT NOT NULL,
+                FOREIGN KEY (player_id) REFERENCES players(user_id) ON DELETE CASCADE,
+                UNIQUE(player_id, pet_id)
             );
             CREATE TABLE IF NOT EXISTS duels (
                 challenged_id INTEGER PRIMARY KEY,
@@ -112,9 +130,9 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_inventory_player ON inventory(player_id);
             CREATE INDEX IF NOT EXISTS idx_players_balance ON players(balance);
             CREATE INDEX IF NOT EXISTS idx_players_level ON players(level);
+            CREATE INDEX IF NOT EXISTS idx_pets_player ON pets(player_id);
         """)
         
-        # Добавляем колонки для квестов, если их нет
         add_column_if_not_exists(conn, "players", "daily_duels", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "daily_boss_kills", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "daily_coins_earned", "INTEGER DEFAULT 0")
@@ -122,6 +140,7 @@ def init_db():
         add_column_if_not_exists(conn, "players", "total_duels_won", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "total_boss_kills", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "daily_quest_claimed", "INTEGER DEFAULT 0")
+        add_column_if_not_exists(conn, "players", "active_pet_id", "INTEGER")
         
         conn.commit()
     finally:
@@ -173,7 +192,6 @@ def migrate_from_json():
         conn.close()
 
 
-# ==================== ИГРОКИ ====================
 def get_player(user_id, api_get_name_func):
     conn = get_conn()
     try:
@@ -212,7 +230,6 @@ def save_player(player):
         conn.close()
 
 
-# ==================== КВЕСТЫ И ДОСТИЖЕНИЯ ====================
 def check_and_reset_daily_quests(player):
     today = datetime.now().strftime("%Y-%m-%d")
     if player.get("last_quest_date") != today:
@@ -235,8 +252,6 @@ def update_daily_progress(user_id, quest_type, amount=1):
             conn.execute("UPDATE players SET daily_boss_kills = daily_boss_kills + ? WHERE user_id = ?", (amount, user_id))
         elif quest_type == "coins":
             conn.execute("UPDATE players SET daily_coins_earned = daily_coins_earned + ? WHERE user_id = ?", (amount, user_id))
-        
-        # Сброс флага claim, если день сменился (упрощённо: просто обнуляем claimed при новом дне в get_player, но здесь обновим дату если нужно)
         conn.execute("UPDATE players SET last_quest_date = ?, daily_quest_claimed = 0 WHERE user_id = ? AND last_quest_date != ?", (today, user_id, today))
         conn.commit()
     finally:
@@ -256,26 +271,25 @@ def claim_daily_quests(player):
     completed = []
 
     for q_type, q_data in DAILY_QUESTS.items():
-        current = player.get(f"daily_{q_type}", 0) if q_type != "duels" else player.get("daily_duels", 0)
-        # Корректировка ключей: в БД daily_duels, daily_boss_kills, daily_coins_earned
         if q_type == "duels":
             current = player.get("daily_duels", 0)
         elif q_type == "boss":
             current = player.get("daily_boss_kills", 0)
         elif q_type == "coins":
             current = player.get("daily_coins_earned", 0)
+        else:
+            current = 0
 
         if current >= q_data["target"]:
             total_coins += q_data["reward_coins"]
             total_exp += q_data["reward_exp"]
-            completed.append(f"✅ {q_data['name']} (+{q_data['reward_coins']}💰, +{q_data['reward_exp']}⭐)")
+            completed.append(f"✅ {q_data['name']} (+{q_data['reward_coins']}, +{q_data['reward_exp']}⭐)")
 
     if not completed:
         return False, "Ни один квест ещё не выполнен. Продолжай играть!"
 
     player["balance"] += total_coins
     player["exp"] += total_exp
-    # Простая проверка уровня
     while player["exp"] >= player["level"] * 10:
         player["exp"] -= player["level"] * 10
         player["level"] += 1
@@ -283,7 +297,7 @@ def claim_daily_quests(player):
     player["daily_quest_claimed"] = 1
     save_player(player)
     
-    msg = f"🎉 Квесты выполнены!\n\n" + "\n".join(completed)
+    msg = f" Квесты выполнены!\n\n" + "\n".join(completed)
     msg += f"\n\n💰 Всего: +{total_coins} монет\n⭐ Всего: +{total_exp} опыта"
     return True, msg
 
@@ -293,7 +307,7 @@ def get_daily_quests_status(player):
     if player.get("last_quest_date") != today:
         player = check_and_reset_daily_quests(player)
 
-    lines = ["📜 Ежедневные задания:\n"]
+    lines = [" Ежедневные задания:\n"]
     for q_type, q_data in DAILY_QUESTS.items():
         if q_type == "duels":
             current = player.get("daily_duels", 0)
@@ -305,8 +319,8 @@ def get_daily_quests_status(player):
             current = 0
             
         target = q_data["target"]
-        status = "✅" if current >= target else "⏳"
-        lines.append(f"{status} {q_data['name']} ({current}/{target}) — {q_data['reward_coins']}💰, {q_data['reward_exp']}⭐")
+        status = "✅" if current >= target else ""
+        lines.append(f"{status} {q_data['name']} ({current}/{target}) — {q_data['reward_coins']}, {q_data['reward_exp']}⭐")
     
     if player.get("daily_quest_claimed", 0) == 1:
         lines.append("\n✅ Награды уже получены сегодня.")
@@ -319,11 +333,9 @@ def get_daily_quests_status(player):
 def unlock_achievement(user_id, ach_id, player_name):
     conn = get_conn()
     try:
-        # Проверяем, не получено ли уже
         exists = conn.execute("SELECT 1 FROM achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id)).fetchone()
         if exists:
             return None
-        
         now = datetime.now().isoformat()
         conn.execute("INSERT INTO achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)", (user_id, ach_id, now))
         conn.commit()
@@ -336,7 +348,6 @@ def get_achievements_list(user_id):
     conn = get_conn()
     try:
         unlocked = [row["achievement_id"] for row in conn.execute("SELECT achievement_id FROM achievements WHERE user_id = ?", (user_id,)).fetchall()]
-        
         lines = ["🏆 Достижения:\n"]
         for ach_id, data in ACHIEVEMENTS.items():
             if ach_id in unlocked:
@@ -368,6 +379,55 @@ def check_achievements_on_action(user_id, player, action):
     if new_achs:
         save_player(player)
     return new_achs
+
+
+# ==================== ФУНКЦИИ ДЛЯ ПИТОМЦЕВ ====================
+def get_player_pets(user_id):
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT pet_id, is_active FROM pets WHERE player_id = ?", (user_id,)).fetchall()
+        return [{"pet_id": r["pet_id"], "is_active": bool(r["is_active"])} for r in rows]
+    finally:
+        conn.close()
+
+
+def buy_pet(user_id, pet_id):
+    conn = get_conn()
+    try:
+        now = datetime.now().isoformat()
+        conn.execute("INSERT OR IGNORE INTO pets (player_id, pet_id, is_active, acquired_at) VALUES (?, ?, 0, ?)", (user_id, pet_id, now))
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def activate_pet(user_id, pet_id):
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE pets SET is_active = 0 WHERE player_id = ?", (user_id,))
+        conn.execute("UPDATE pets SET is_active = 1 WHERE player_id = ? AND pet_id = ?", (user_id, pet_id))
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def get_active_pet(user_id):
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT pet_id FROM pets WHERE player_id = ? AND is_active = 1", (user_id,)).fetchone()
+        return row["pet_id"] if row else None
+    finally:
+        conn.close()
+
+
+def get_pet_bonus(user_id, bonus_type):
+    active_pet_id = get_active_pet(user_id)
+    if not active_pet_id or active_pet_id not in PETS:
+        return 0.0
+    pet = PETS[active_pet_id]
+    return pet.get(f"bonus_{bonus_type}", 0.0)
 
 
 # ==================== ИНВЕНТАРЬ И ЭКИПИРОВКА ====================
@@ -499,6 +559,5 @@ def clear_boss():
         conn.close()
 
 
-# Инициализация при импорте
 init_db()
 migrate_from_json()
