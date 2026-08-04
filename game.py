@@ -19,8 +19,10 @@ if not TOKEN or not GROUP_ID:
     raise SystemExit("Создай файл .env и укажи VK_TOKEN и VK_GROUP_ID")
 
 DATA_FILE = os.path.join(BASE_DIR, "players.json")
+DUELS_FILE = os.path.join(BASE_DIR, "duels.json")
 WORK_COOLDOWN_SECONDS = 60
 MIN_BET = 10
+DUEL_TIMEOUT_SECONDS = 300  # 5 минут на принятие вызова
 
 session = VkApi(token=TOKEN)
 api = session.get_api()
@@ -38,11 +40,12 @@ ITEMS = {
 }
 
 ITEM_EMOJI = {
-    1: "🧪", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "🛡️",
+    1: "🧪", 2: "⚔️", 3: "️", 4: "🛡️", 5: "🛡️",
     6: "👑", 7: "💎", 8: "🧪",
 }
 
 
+# ==================== ЗАГРУЗКА/СОХРАНЕНИЕ ====================
 def load_players():
     if os.path.exists(DATA_FILE):
         try:
@@ -61,6 +64,22 @@ def save_players():
         json.dump(players, f, ensure_ascii=False, indent=2)
 
 
+def load_duels():
+    if os.path.exists(DUELS_FILE):
+        try:
+            with open(DUELS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_duels(duels):
+    with open(DUELS_FILE, "w", encoding="utf-8") as f:
+        json.dump(duels, f, ensure_ascii=False, indent=2)
+
+
+# ==================== ИГРОКИ ====================
 def get_name(user_id):
     try:
         users = api.users.get(user_ids=user_id)
@@ -90,15 +109,21 @@ def get_player(user_id):
                 "armor": None,
                 "cosmetic": None,
             },
+            "last_peer_id": None,
         }
         save_players()
     return players[key]
 
 
+# ==================== ОТПРАВКА ====================
 def send(peer_id, text):
-    api.messages.send(peer_id=peer_id, message=text, random_id=get_random_id())
+    try:
+        api.messages.send(peer_id=peer_id, message=text, random_id=get_random_id())
+    except Exception as e:
+        print(f"Ошибка отправки в {peer_id}: {e}")
 
 
+# ==================== ОПЫТ ====================
 def add_exp(player, amount=1):
     player["exp"] += amount
     leveled_up = False
@@ -109,9 +134,10 @@ def add_exp(player, amount=1):
     return leveled_up
 
 
+# ==================== СПРАВКА ====================
 HELP_TEXT = (
     "Игровой бот\n\n"
-    "Команды:\n"
+    "Основные:\n"
     "старт — начать\n"
     "помощь — список команд\n"
     "баланс — показать баланс\n"
@@ -120,14 +146,20 @@ HELP_TEXT = (
     "дуэль — сразиться с ботом\n"
     "бонус — ежедневный бонус\n"
     "топ — рейтинг игроков\n"
-    "профиль — показать профиль\n"
+    "профиль — показать профиль\n\n"
+    "Магазин:\n"
     "магазин — каталог предметов\n"
     "инвентарь — твои предметы\n"
     "купить <id> — купить предмет\n"
-    "экипировать <id> — надеть предмет"
+    "экипировать <id> — надеть предмет\n\n"
+    "PvP:\n"
+    "вызов @id123 — вызвать игрока на дуэль\n"
+    "принять — принять вызов\n"
+    "отклонить — отклонить вызов"
 )
 
 
+# ==================== МАГАЗИН ====================
 def show_shop(peer_id):
     lines = ["Магазин предметов\n"]
     for item_id, item in ITEMS.items():
@@ -206,7 +238,7 @@ def use_item(player, peer_id, item_id_str):
         return
 
     item = ITEMS[item_id]
-    emoji = ITEM_EMOJI.get(item_id, "📦")
+    emoji = ITEM_EMOJI.get(item_id, "")
 
     if item["type"] == "consumable":
         player["inventory"].remove(item_id)
@@ -229,6 +261,7 @@ def use_item(player, peer_id, item_id_str):
         send(peer_id, "Этот предмет нельзя использовать")
 
 
+# ==================== ТОП ====================
 def show_top(peer_id):
     ranked = sorted(
         players.items(),
@@ -245,6 +278,7 @@ def show_top(peer_id):
     send(peer_id, "\n".join(lines))
 
 
+# ==================== ЕЖЕДНЕВНЫЙ БОНУС ====================
 def claim_daily_bonus(player, peer_id):
     today = datetime.date.today().isoformat()
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
@@ -270,6 +304,7 @@ def claim_daily_bonus(player, peer_id):
     )
 
 
+# ==================== ДУЭЛЬ С БОТОМ ====================
 def get_player_damage(player):
     base_damage = random.randint(12, 25)
     if player.get("equipped"):
@@ -288,7 +323,7 @@ def get_player_defense(player):
     return defense
 
 
-def play_duel(player, peer_id):
+def play_duel_vs_bot(player, peer_id):
     player_hp = 100
     bot_hp = 100
     log = []
@@ -322,8 +357,184 @@ def play_duel(player, peer_id):
     send(peer_id, "Дуэль с ботом:\n" + "\n".join(log[-3:]) + "\n\n" + result)
 
 
+# ==================== PvP ДУЭЛИ ====================
+def parse_user_id_from_mention(text):
+    """
+    Извлекает числовой ID из упоминания ВК.
+    Поддерживает форматы: @id123456, [id123456|Имя], id123456, просто 123456
+    """
+    import re
+    # [id123456|Имя]
+    m = re.search(r'\[id(\d+)', text)
+    if m:
+        return int(m.group(1))
+    # @id123456
+    m = re.search(r'@id(\d+)', text)
+    if m:
+        return int(m.group(1))
+    # просто число
+    m = re.search(r'(\d{5,10})', text)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def challenge_player(challenger_id, challenged_id, challenger_peer_id):
+    """Игрок challenger вызывает challenged на дуэль"""
+    if challenged_id == challenger_id:
+        send(challenger_peer_id, "Нельзя вызвать самого себя на дуэль!")
+        return
+
+    if str(challenged_id) not in players:
+        send(challenger_peer_id, "Этот игрок ещё не начинал игру. Пусть сначала напишет боту 'старт'.")
+        return
+
+    duels = load_duels()
+
+    # Проверяем, нет ли уже активного вызова для challenged
+    if str(challenged_id) in duels:
+        existing = duels[str(challenged_id)]
+        # Проверяем, не истёк ли таймаут
+        if time.time() - existing.get("timestamp", 0) < DUEL_TIMEOUT_SECONDS:
+            send(challenger_peer_id, "Этот игрок уже получил вызов. Подождите, пока он ответит.")
+            return
+        # Таймаут истёк — удаляем старый вызов
+
+    # Создаём вызов
+    duels[str(challenged_id)] = {
+        "challenger_id": challenger_id,
+        "challenger_peer_id": challenger_peer_id,
+        "timestamp": time.time(),
+    }
+    save_duels(duels)
+
+    challenged_player = get_player(challenged_id)
+    challenger_player = get_player(challenger_id)
+
+    send(challenger_peer_id, f"Вы вызвали {challenged_player['name']} на дуэль! Ждём ответа...")
+    
+    challenged_peer_id = challenged_player.get("last_peer_id")
+    if challenged_peer_id:
+        send(challenged_peer_id,
+             f"⚔️ {challenger_player['name']} вызывает вас на дуэль!\nНапишите: принять\nИли: отклонить")
+    else:
+        send(challenger_peer_id, "Но игрок ещё не писал боту — он не получит уведомление.")
+
+
+def accept_duel(challenged_id, challenged_peer_id):
+    """Игрок принимает вызов на дуэль"""
+    duels = load_duels()
+
+    if str(challenged_id) not in duels:
+        send(challenged_peer_id, "У вас нет активных вызовов на дуэль.")
+        return
+
+    challenge = duels[str(challenged_id)]
+
+    # Проверяем таймаут
+    if time.time() - challenge.get("timestamp", 0) >= DUEL_TIMEOUT_SECONDS:
+        del duels[str(challenged_id)]
+        save_duels(duels)
+        send(challenged_peer_id, "Вызов истёк. Попросите вызвать вас снова.")
+        return
+
+    challenger_id = challenge["challenger_id"]
+    challenger_peer_id = challenge["challenger_peer_id"]
+
+    # Удаляем вызов
+    del duels[str(challenged_id)]
+    save_duels(duels)
+
+    # Начинаем дуэль
+    send(challenged_peer_id, "Вы приняли вызов! Начинается дуэль...")
+    send(challenger_peer_id, "Соперник принял вызов! Начинается дуэль...")
+
+    player1 = get_player(challenger_id)
+    player2 = get_player(challenged_id)
+
+    play_pvp_duel(player1, player2, challenger_peer_id, challenged_peer_id)
+
+
+def decline_duel(challenged_id, challenged_peer_id):
+    """Игрок отклоняет вызов"""
+    duels = load_duels()
+
+    if str(challenged_id) not in duels:
+        send(challenged_peer_id, "У вас нет активных вызовов на дуэль.")
+        return
+
+    challenge = duels[str(challenged_id)]
+    challenger_id = challenge["challenger_id"]
+    challenger_peer_id = challenge["challenger_peer_id"]
+
+    del duels[str(challenged_id)]
+    save_duels(duels)
+
+    challenger_player = get_player(challenger_id)
+    send(challenged_peer_id, "Вы отклонили вызов на дуэль.")
+    send(challenger_peer_id, f"{challenger_player['name']} отклонил ваш вызов на дуэль.")
+
+
+def play_pvp_duel(player1, player2, peer1_id, peer2_id):
+    """PvP дуэль между двумя игроками"""
+    hp1 = 100
+    hp2 = 100
+    log = []
+
+    for round_number in range(1, 8):
+        if hp1 <= 0 or hp2 <= 0:
+            break
+
+        # Оба бьют одновременно
+        dmg1 = get_player_damage(player1)
+        dmg2 = get_player_damage(player2)
+        def1 = get_player_defense(player1)
+        def2 = get_player_defense(player2)
+
+        actual_dmg1 = max(3, dmg1 - def2)
+        actual_dmg2 = max(3, dmg2 - def1)
+
+        hp2 -= actual_dmg1
+        hp1 -= actual_dmg2
+
+        log.append(f"Раунд {round_number}: {player1['name']} -{actual_dmg1}, {player2['name']} -{actual_dmg2}")
+
+    # Определяем победителя
+    if hp1 > 0 and hp2 <= 0:
+        reward = random.randint(50, 100)
+        player1["balance"] += reward
+        add_exp(player1, 5)
+        add_exp(player2, 2)
+        save_players()
+        result = f" Победил {player1['name']}! Награда: {reward} монет."
+    elif hp2 > 0 and hp1 <= 0:
+        reward = random.randint(50, 100)
+        player2["balance"] += reward
+        add_exp(player2, 5)
+        add_exp(player1, 2)
+        save_players()
+        result = f"🏆 Победил {player2['name']}! Награда: {reward} монет."
+    else:
+        add_exp(player1, 2)
+        add_exp(player2, 2)
+        save_players()
+        result = "Ничья. Оба получают опыт."
+
+    duel_log = "\n".join(log[-5:])
+    result_message = f"⚔️ PvP дуэль:\n{duel_log}\n\n{result}"
+
+    send(peer1_id, result_message)
+    if peer2_id != peer1_id:
+        send(peer2_id, result_message)
+
+
+# ==================== ОБРАБОТЧИК КОМАНД ====================
 def handle(user_id, peer_id, text):
     player = get_player(user_id)
+    # Сохраняем последний peer_id для отправки сообщений этому игроку
+    player["last_peer_id"] = peer_id
+    save_players()
+
     command = text.lower().strip()
 
     if not command:
@@ -383,7 +594,7 @@ def handle(user_id, peer_id, text):
         return
 
     if command in ["дуэль", "duel", "!дуэль"]:
-        play_duel(player, peer_id)
+        play_duel_vs_bot(player, peer_id)
         return
 
     if command in ["бонус", "bonus", "!бонус", "ежедневный бонус"]:
@@ -395,6 +606,11 @@ def handle(user_id, peer_id, text):
         return
 
     if command in ["профиль", "profile", "!профиль"]:
+        cosmetic = ""
+        if player.get("equipped") and player["equipped"].get("cosmetic"):
+            cid = player["equipped"]["cosmetic"]
+            if cid in ITEMS:
+                cosmetic = f"\nУкрашение: {ITEM_EMOJI.get(cid, '')} {ITEMS[cid]['name']}"
         send(
             peer_id,
             "Профиль\n\n"
@@ -402,7 +618,8 @@ def handle(user_id, peer_id, text):
             f"Уровень: {player['level']}\n"
             f"Опыт: {player['exp']}\n"
             f"Баланс: {player['balance']} монет\n"
-            f"Серия бонусов: {player.get('bonus_streak', 0)} дн.",
+            f"Серия бонусов: {player.get('bonus_streak', 0)} дн."
+            f"{cosmetic}",
         )
         return
 
@@ -438,5 +655,23 @@ def handle(user_id, peer_id, text):
         use_item(player, peer_id, parts[1])
         return
 
-        # Неизвестная команда — просто молчим
+    # === PvP команды ===
+    if command.startswith("вызов ") or command.startswith("pvp ") or command.startswith("дуэль @"):
+        # Извлекаем ID из упоминания
+        opponent_id = parse_user_id_from_mention(text)
+        if opponent_id is None:
+            send(peer_id, "Не удалось определить ID. Формат: вызов @id123456")
+            return
+        challenge_player(user_id, opponent_id, peer_id)
+        return
+
+    if command in ["принять", "accept"]:
+        accept_duel(user_id, peer_id)
+        return
+
+    if command in ["отклонить", "decline", "отмена"]:
+        decline_duel(user_id, peer_id)
+        return
+
+    # Неизвестная команда — молчим
     return
