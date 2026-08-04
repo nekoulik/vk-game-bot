@@ -3,6 +3,7 @@ import json
 import random
 import time
 import datetime
+from collections import Counter
 
 from vk_api import VkApi
 from vk_api.utils import get_random_id
@@ -26,14 +27,19 @@ api = session.get_api()
 
 # ==================== МАГАЗИН ====================
 ITEMS = {
-    1: {"name": "🧪 Зелье здоровья", "price": 100, "type": "consumable", "desc": "Восстанавливает 30 HP в дуэли", "effect": {"hp": 30}},
-    2: {"name": "⚔️ Ржавый меч", "price": 500, "type": "weapon", "desc": "+10 к урону в дуэлях", "effect": {"damage": 10}},
-    3: {"name": "️ Стальной меч", "price": 1500, "type": "weapon", "desc": "+25 к урону в дуэлях", "effect": {"damage": 25}},
-    4: {"name": "🛡️ Деревянный щит", "price": 400, "type": "armor", "desc": "-10 от получаемого урона", "effect": {"defense": 10}},
-    5: {"name": "🛡️ Железный щит", "price": 1200, "type": "armor", "desc": "-25 от получаемого урона", "effect": {"defense": 25}},
-    6: {"name": "👑 Корона", "price": 5000, "type": "cosmetic", "desc": "Для красоты в профиле", "effect": {}},
-    7: {"name": "💎 Алмазный меч", "price": 5000, "type": "weapon", "desc": "+50 к урону в дуэлях", "effect": {"damage": 50}},
-    8: {"name": "🧪 Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
+    1: {"name": "Зелье здоровья", "price": 100, "type": "consumable", "desc": "Восстанавливает 30 HP в дуэли", "effect": {"hp": 30}},
+    2: {"name": "Ржавый меч", "price": 500, "type": "weapon", "desc": "+10 к урону в дуэлях", "effect": {"damage": 10}},
+    3: {"name": "Стальной меч", "price": 1500, "type": "weapon", "desc": "+25 к урону в дуэлях", "effect": {"damage": 25}},
+    4: {"name": "Деревянный щит", "price": 400, "type": "armor", "desc": "-10 от получаемого урона", "effect": {"defense": 10}},
+    5: {"name": "Железный щит", "price": 1200, "type": "armor", "desc": "-25 от получаемого урона", "effect": {"defense": 25}},
+    6: {"name": "Корона", "price": 5000, "type": "cosmetic", "desc": "Для красоты в профиле", "effect": {}},
+    7: {"name": "Алмазный меч", "price": 5000, "type": "weapon", "desc": "+50 к урону в дуэлях", "effect": {"damage": 50}},
+    8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
+}
+
+ITEM_EMOJI = {
+    1: "🧪", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "🛡️",
+    6: "👑", 7: "💎", 8: "🧪",
 }
 
 
@@ -78,8 +84,8 @@ def get_player(user_id):
             "last_work": 0,
             "last_bonus": "",
             "bonus_streak": 0,
-            "inventory": [],  # Список ID предметов
-            "equipped": {     # Экипировка
+            "inventory": [],
+            "equipped": {
                 "weapon": None,
                 "armor": None,
                 "cosmetic": None,
@@ -103,31 +109,33 @@ def add_exp(player, amount=1):
     return leveled_up
 
 
-HELP_TEXT = """🎮 Игровой бот
-
-Команды:
-старт — начать
-помощь — список команд
-баланс — показать баланс
-работа — заработать монеты
-ставка 50 — сделать ставку
-дуэль — сразиться с ботом
-бонус — ежедневный бонус
-топ — рейтинг игроков
-профиль — показать профиль
-магазин — купить предметы
-инвентарь — твои предметы
-купить <id> — купить предмет
-использовать <id> — использовать предмет"""
+HELP_TEXT = (
+    "Игровой бот\n\n"
+    "Команды:\n"
+    "старт — начать\n"
+    "помощь — список команд\n"
+    "баланс — показать баланс\n"
+    "работа — заработать монеты\n"
+    "ставка 50 — сделать ставку\n"
+    "дуэль — сразиться с ботом\n"
+    "бонус — ежедневный бонус\n"
+    "топ — рейтинг игроков\n"
+    "профиль — показать профиль\n"
+    "магазин — каталог предметов\n"
+    "инвентарь — твои предметы\n"
+    "купить <id> — купить предмет\n"
+    "экипировать <id> — надеть предмет"
+)
 
 
 def show_shop(peer_id):
-    lines = ["🛒 **Магазин предметов**\n"]
+    lines = ["Магазин предметов\n"]
     for item_id, item in ITEMS.items():
-        lines.append(f"{item_id}. {item['name']} — {item['price']} монет")
+        emoji = ITEM_EMOJI.get(item_id, "📦")
+        lines.append(f"{item_id}. {emoji} {item['name']} — {item['price']} монет")
         lines.append(f"   {item['desc']}")
         lines.append("")
-    lines.append("💡 Купи: `купить <id>` (например: `купить 1`)")
+    lines.append("Чтобы купить, напиши: купить <номер> (например: купить 1)")
     send(peer_id, "\n".join(lines))
 
 
@@ -135,16 +143,16 @@ def buy_item(player, peer_id, item_id_str):
     try:
         item_id = int(item_id_str)
     except ValueError:
-        send(peer_id, "❌ Укажи ID предмета числом (пример: `купить 1`)")
+        send(peer_id, "Укажи номер предмета числом (пример: купить 1)")
         return
 
     if item_id not in ITEMS:
-        send(peer_id, f"❌ Предмета с ID {item_id} не существует. Смотри `магазин`")
+        send(peer_id, f"Предмета с номером {item_id} нет. Смотри: магазин")
         return
 
     item = ITEMS[item_id]
     if player["balance"] < item["price"]:
-        send(peer_id, f"❌ Недостаточно монет! Нужно {item['price']}, у тебя {player['balance']}")
+        send(peer_id, f"Недостаточно монет! Нужно {item['price']}, у тебя {player['balance']}")
         return
 
     player["balance"] -= item["price"]
@@ -153,34 +161,32 @@ def buy_item(player, peer_id, item_id_str):
     player["inventory"].append(item_id)
     save_players()
 
-    send(peer_id, f"✅ Куплено: {item['name']} за {item['price']} монет!\nТеперь в твоём инвентаре (`инвентарь`)")
+    emoji = ITEM_EMOJI.get(item_id, "📦")
+    send(peer_id, f"Куплено: {emoji} {item['name']} за {item['price']} монет!\nТеперь в твоём инвентаре (команда: инвентарь)")
 
 
 def show_inventory(player, peer_id):
     if "inventory" not in player or not player["inventory"]:
-        send(peer_id, "🎒 Твой инвентарь пуст. Загляни в `магазин`!")
+        send(peer_id, "Твой инвентарь пуст. Загляни в магазин!")
         return
 
-    lines = ["🎒 **Твой инвентарь**\n"]
+    lines = ["Твой инвентарь\n"]
     inventory = player["inventory"]
-    
-    # Считаем количество каждого предмета
-    from collections import Counter
     counts = Counter(inventory)
-    
+
     for item_id, count in sorted(counts.items()):
         if item_id in ITEMS:
             item = ITEMS[item_id]
+            emoji = ITEM_EMOJI.get(item_id, "")
             equipped_mark = ""
-            # Проверяем, экипировано ли
             if player.get("equipped"):
                 for slot, equipped_id in player["equipped"].items():
                     if equipped_id == item_id:
-                        equipped_mark = " ⚡(экипировано)"
+                        equipped_mark = " (надето)"
                         break
-            lines.append(f"{item_id}. {item['name']} x{count}{equipped_mark}")
-    
-    lines.append("\n💡 Используй: `использовать <id>` или `экипировать <id>`")
+            lines.append(f"{item_id}. {emoji} {item['name']} x{count}{equipped_mark}")
+
+    lines.append("\nНадеть: экипировать <номер>")
     send(peer_id, "\n".join(lines))
 
 
@@ -188,40 +194,39 @@ def use_item(player, peer_id, item_id_str):
     try:
         item_id = int(item_id_str)
     except ValueError:
-        send(peer_id, "❌ Укажи ID предмета числом")
+        send(peer_id, "Укажи номер предмета числом")
         return
 
     if "inventory" not in player or item_id not in player["inventory"]:
-        send(peer_id, "❌ У тебя нет этого предмета!")
+        send(peer_id, "У тебя нет этого предмета!")
         return
 
     if item_id not in ITEMS:
-        send(peer_id, "❌ Неизвестный предмет")
+        send(peer_id, "Неизвестный предмет")
         return
 
     item = ITEMS[item_id]
-    
+    emoji = ITEM_EMOJI.get(item_id, "📦")
+
     if item["type"] == "consumable":
-        # Расходник — просто удаляем один экземпляр
         player["inventory"].remove(item_id)
         save_players()
-        send(peer_id, f"✅ Использовано: {item['name']}\n{item['desc']}")
+        send(peer_id, f"Использовано: {emoji} {item['name']}\n{item['desc']}")
     elif item["type"] in ["weapon", "armor", "cosmetic"]:
-        # Экипировка — экипируем
         if "equipped" not in player:
             player["equipped"] = {"weapon": None, "armor": None, "cosmetic": None}
-        
+
         slot = item["type"]
         old_item = player["equipped"].get(slot)
         player["equipped"][slot] = item_id
         save_players()
-        
-        if old_item:
-            send(peer_id, f"✅ Экипировано: {item['name']}\n(предыдущее {ITEMS[old_item]['name']} снято)")
+
+        if old_item and old_item in ITEMS:
+            send(peer_id, f"Надето: {emoji} {item['name']}\n(предыдущее {ITEMS[old_item]['name']} снято)")
         else:
-            send(peer_id, f"✅ Экипировано: {item['name']}\n{item['desc']}")
+            send(peer_id, f"Надето: {emoji} {item['name']}\n{item['desc']}")
     else:
-        send(peer_id, "❌ Этот предмет нельзя использовать")
+        send(peer_id, "Этот предмет нельзя использовать")
 
 
 def show_top(peer_id):
@@ -231,8 +236,8 @@ def show_top(peer_id):
         reverse=True,
     )[:10]
 
-    medals = ["🥇", "🥈", ""]
-    lines = [" Топ игроков:", ""]
+    medals = ["1 место", "2 место", "3 место"]
+    lines = ["Топ игроков:\n"]
     for i, (_, p) in enumerate(ranked, start=1):
         place = medals[i - 1] if i <= 3 else f"{i}."
         lines.append(f"{place} {p['name']} — ур. {p['level']}, {p['balance']} монет")
@@ -245,7 +250,7 @@ def claim_daily_bonus(player, peer_id):
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 
     if player.get("last_bonus") == today:
-        send(peer_id, "🎁 Бонус уже получен сегодня. Возвращайся завтра!")
+        send(peer_id, "Бонус уже получен сегодня. Возвращайся завтра!")
         return
 
     if player.get("last_bonus") == yesterday:
@@ -261,12 +266,11 @@ def claim_daily_bonus(player, peer_id):
 
     send(
         peer_id,
-        f"🎁 Ежедневный бонус: +{reward} монет!\n🔥 Серия входов: {player['bonus_streak']} дн.",
+        f"Ежедневный бонус: +{reward} монет!\nСерия входов: {player['bonus_streak']} дн.",
     )
 
 
 def get_player_damage(player):
-    """Считаем урон игрока с учётом экипировки"""
     base_damage = random.randint(12, 25)
     if player.get("equipped"):
         weapon_id = player["equipped"].get("weapon")
@@ -276,7 +280,6 @@ def get_player_damage(player):
 
 
 def get_player_defense(player):
-    """Считаем защиту игрока"""
     defense = 0
     if player.get("equipped"):
         armor_id = player["equipped"].get("armor")
@@ -293,10 +296,10 @@ def play_duel(player, peer_id):
     for round_number in range(1, 6):
         player_damage = get_player_damage(player)
         bot_damage = max(0, random.randint(12, 25) - get_player_defense(player))
-        
+
         bot_hp -= player_damage
         player_hp -= bot_damage
-        
+
         log.append(f"Раунд {round_number}: ты {player_damage}, бот {bot_damage}")
         if bot_hp <= 0 or player_hp <= 0:
             break
@@ -306,17 +309,17 @@ def play_duel(player, peer_id):
         player["balance"] += reward
         add_exp(player, 3)
         save_players()
-        result = f"🏆 Победа! Награда: {reward} монет."
+        result = f"Победа! Награда: {reward} монет."
     elif player_hp <= 0 and bot_hp > 0:
         add_exp(player, 1)
         save_players()
-        result = "💀 Поражение. Попробуй ещё раз."
+        result = "Поражение. Попробуй ещё раз."
     else:
         add_exp(player, 1)
         save_players()
-        result = "🤝 Ничья."
+        result = "Ничья."
 
-    send(peer_id, "️ Дуэль с ботом:\n" + "\n".join(log[-3:]) + "\n\n" + result)
+    send(peer_id, "Дуэль с ботом:\n" + "\n".join(log[-3:]) + "\n\n" + result)
 
 
 def handle(user_id, peer_id, text):
@@ -327,27 +330,27 @@ def handle(user_id, peer_id, text):
         return
 
     if command in ["старт", "start", "/start", "!start", "помощь", "help"]:
-        send(peer_id, f"{player['name']}, добро пожаловать!\n{HELP_TEXT}")
+        send(peer_id, f"{player['name']}, добро пожаловать!\n\n{HELP_TEXT}")
         return
 
     if command in ["баланс", "balance", "!баланс"]:
-        send(peer_id, f"💰 Баланс: {player['balance']} монет.")
+        send(peer_id, f"Баланс: {player['balance']} монет.")
         return
 
     if command in ["работа", "work", "!работа"]:
         now = int(time.time())
         wait_seconds = WORK_COOLDOWN_SECONDS - (now - player.get("last_work", 0))
         if wait_seconds > 0:
-            send(peer_id, f"⏳ Отдохни ещё {wait_seconds} сек.")
+            send(peer_id, f"Отдохни ещё {wait_seconds} сек.")
             return
         earned = random.randint(20, 80)
         player["balance"] += earned
         player["last_work"] = now
         level_up = add_exp(player, 2)
         save_players()
-        message = f"👷 {player['name']}, ты заработал(а) {earned} монет."
+        message = f"{player['name']}, ты заработал(а) {earned} монет."
         if level_up:
-            message += f"\n🎉 Новый уровень: {player['level']}!"
+            message += f"\nНовый уровень: {player['level']}!"
         send(peer_id, message)
         return
 
@@ -371,9 +374,9 @@ def handle(user_id, peer_id, text):
         if random.random() < 0.45:
             prize = amount * 2
             player["balance"] += prize
-            message = f"🎰 Выигрыш! Ты получаешь {prize} монет."
+            message = f"Выигрыш! Ты получаешь {prize} монет."
         else:
-            message = f"🎰 Не повезло. Ты потерял(а) {amount} монет."
+            message = f"Не повезло. Ты потерял(а) {amount} монет."
         add_exp(player, 1)
         save_players()
         send(peer_id, message)
@@ -394,12 +397,12 @@ def handle(user_id, peer_id, text):
     if command in ["профиль", "profile", "!профиль"]:
         send(
             peer_id,
-            "🧿 Профиль\n\n"
+            "Профиль\n\n"
             f"Имя: {player['name']}\n"
             f"Уровень: {player['level']}\n"
             f"Опыт: {player['exp']}\n"
             f"Баланс: {player['balance']} монет\n"
-            f"🔥 Серия бонусов: {player.get('bonus_streak', 0)} дн.",
+            f"Серия бонусов: {player.get('bonus_streak', 0)} дн.",
         )
         return
 
@@ -435,4 +438,5 @@ def handle(user_id, peer_id, text):
         use_item(player, peer_id, parts[1])
         return
 
-    send(peer_id, "Не понял команду. Напиши: помощь")
+        # Неизвестная команда — просто молчим
+    return
