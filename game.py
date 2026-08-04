@@ -625,8 +625,17 @@ def create_new_boss(user_id, peer_id):
 
 
 def attack_boss(user_id, peer_id):
-    """Атаковать босса"""
     boss_data = load_boss()
+    
+    # === ОТЛАДКА ===
+    print(f"[BOSS DEBUG] attack_boss called")
+    print(f"[BOSS DEBUG] boss_data: {boss_data}")
+    print(f"[BOSS DEBUG] current_time: {time.time()}")
+    print(f"[BOSS DEBUG] start_time: {boss_data.get('start_time', 'NOT SET')}")
+    if boss_data.get('start_time'):
+        elapsed = time.time() - boss_data.get('start_time', 0)
+        print(f"[BOSS DEBUG] elapsed time: {elapsed} seconds")
+    # ===============
 
     if not boss_data.get("active"):
         send(peer_id, "Сейчас нет активного боя. Напиши 'босс' чтобы начать!")
