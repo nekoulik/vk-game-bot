@@ -31,8 +31,8 @@ ACHIEVEMENTS = {
 PETS = {
     1: {"name": "Собака", "emoji": "🐕", "price": 1000, "bonus_damage": 0.05, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0, "desc": "+5% к урону в дуэлях"},
     2: {"name": "Кот", "emoji": "🐈", "price": 800, "bonus_damage": 0, "bonus_coins": 0.10, "bonus_exp": 0, "bonus_daily": 0, "desc": "+10% к монетам с работы"},
-    3: {"name": "Орёл", "emoji": "🦅", "price": 1200, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+5% к опыту"},
-    4: {"name": "Дракон", "emoji": "🐉", "price": 5000, "bonus_damage": 0.10, "bonus_coins": 0.05, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+10% урона, +5% монет, +5% опыта"},
+    3: {"name": "Орёл", "emoji": "", "price": 1200, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+5% к опыту"},
+    4: {"name": "Дракон", "emoji": "", "price": 5000, "bonus_damage": 0.10, "bonus_coins": 0.05, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+10% урона, +5% монет, +5% опыта"},
     5: {"name": "Кролик", "emoji": "🐰", "price": 600, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0.15, "desc": "+15% к ежедневному бонусу"},
 }
 
@@ -41,6 +41,14 @@ SEASON_REWARDS = {
     1: {"coins": 1000, "title": "Чемпион"},
     2: {"coins": 500, "title": "Вице-чемпион"},
     3: {"coins": 250, "title": "Бронзовый"},
+}
+
+# ==================== УВЕДОМЛЕНИЯ ====================
+NOTIFICATION_TYPES = {
+    "daily_bonus": "Ежедневный бонус",
+    "quests": "Невыполненные квесты",
+    "boss": "Появление босса",
+    "inactivity": "Напоминание о неактивности",
 }
 
 
@@ -164,6 +172,16 @@ def init_db():
         add_column_if_not_exists(conn, "players", "title", "TEXT DEFAULT ''")
         add_column_if_not_exists(conn, "players", "current_season", "INTEGER DEFAULT 1")
         add_column_if_not_exists(conn, "players", "last_lottery", "TEXT DEFAULT ''")
+        
+        # Уведомления
+        add_column_if_not_exists(conn, "players", "notify_bonus", "INTEGER DEFAULT 1")
+        add_column_if_not_exists(conn, "players", "notify_quests", "INTEGER DEFAULT 1")
+        add_column_if_not_exists(conn, "players", "notify_boss", "INTEGER DEFAULT 1")
+        add_column_if_not_exists(conn, "players", "notify_inactivity", "INTEGER DEFAULT 1")
+        add_column_if_not_exists(conn, "players", "last_notify_daily_bonus", "TEXT DEFAULT ''")
+        add_column_if_not_exists(conn, "players", "last_notify_quests", "TEXT DEFAULT ''")
+        add_column_if_not_exists(conn, "players", "last_notify_boss", "TEXT DEFAULT ''")
+        add_column_if_not_exists(conn, "players", "last_notify_inactivity", "TEXT DEFAULT ''")
         
         conn.commit()
     finally:
@@ -426,7 +444,7 @@ def claim_daily_quests(player):
     player["daily_quest_claimed"] = 1
     save_player(player)
     
-    msg = "🎉 Квесты выполнены!\n\n" + "\n".join(completed)
+    msg = " Квесты выполнены!\n\n" + "\n".join(completed)
     msg += f"\n\n💰 Всего: +{total_coins} монет\n⭐ Всего: +{total_exp} опыта"
     return True, msg
 
@@ -809,6 +827,133 @@ def force_reset_season():
         conn.execute("UPDATE players SET current_season = ?", (current + 1,))
         conn.commit()
         return len(top_players)
+    finally:
+        conn.close()
+
+
+# ==================== УВЕДОМЛЕНИЯ ====================
+def get_notification_settings(user_id):
+    """Получить настройки уведомлений игрока."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT notify_bonus, notify_quests, notify_boss, notify_inactivity "
+            "FROM players WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row:
+            return {
+                "daily_bonus": bool(row["notify_bonus"]),
+                "quests": bool(row["notify_quests"]),
+                "boss": bool(row["notify_boss"]),
+                "inactivity": bool(row["notify_inactivity"]),
+            }
+        return None
+    finally:
+        conn.close()
+
+
+def set_notification_setting(user_id, notification_type, enabled):
+    """Включить/выключить уведомление."""
+    conn = get_conn()
+    try:
+        if notification_type == "daily_bonus":
+            conn.execute(
+                "UPDATE players SET notify_bonus = ? WHERE user_id = ?",
+                (1 if enabled else 0, user_id)
+            )
+        elif notification_type == "quests":
+            conn.execute(
+                "UPDATE players SET notify_quests = ? WHERE user_id = ?",
+                (1 if enabled else 0, user_id)
+            )
+        elif notification_type == "boss":
+            conn.execute(
+                "UPDATE players SET notify_boss = ? WHERE user_id = ?",
+                (1 if enabled else 0, user_id)
+            )
+        elif notification_type == "inactivity":
+            conn.execute(
+                "UPDATE players SET notify_inactivity = ? WHERE user_id = ?",
+                (1 if enabled else 0, user_id)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_last_notification_time(user_id, notification_type):
+    """Получить время последнего уведомления."""
+    conn = get_conn()
+    try:
+        col_name = f"last_notify_{notification_type}"
+        row = conn.execute(
+            f"SELECT {col_name} FROM players WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        if row:
+            return row[col_name]
+        return None
+    finally:
+        conn.close()
+
+
+def update_last_notification(user_id, notification_type):
+    """Обновить время последнего уведомления."""
+    conn = get_conn()
+    try:
+        now = datetime.now().isoformat()
+        col_name = f"last_notify_{notification_type}"
+        conn.execute(
+            f"UPDATE players SET {col_name} = ? WHERE user_id = ?",
+            (now, user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def should_notify(user_id, notification_type, cooldown_hours=24):
+    """Проверить, можно ли отправить уведомление (прошла ли кулдаун)."""
+    settings = get_notification_settings(user_id)
+    if not settings or not settings.get(notification_type, False):
+        return False
+    
+    last_time = get_last_notification_time(user_id, notification_type)
+    if not last_time:
+        return True
+    
+    try:
+        last_dt = datetime.fromisoformat(last_time)
+        hours_passed = (datetime.now() - last_dt).total_seconds() / 3600
+        return hours_passed >= cooldown_hours
+    except Exception:
+        return True
+
+
+def get_inactive_players(days=7):
+    """Получить список неактивных игроков."""
+    conn = get_conn()
+    try:
+        cutoff = (datetime.now() - datetime.timedelta(days=days)).isoformat()
+        rows = conn.execute(
+            """SELECT user_id, name, last_bonus, last_peer_id 
+               FROM players 
+               WHERE updated_at < ? AND notify_inactivity = 1""",
+            (cutoff,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_all_peer_ids():
+    """Получить все peer_id игроков для рассылки."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT user_id, last_peer_id FROM players WHERE last_peer_id IS NOT NULL"
+        ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 
