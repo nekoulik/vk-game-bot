@@ -56,3 +56,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# WSGI приложение для PythonAnywhere
+app = longpoll
