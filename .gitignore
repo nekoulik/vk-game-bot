@@ -1,8 +1,49 @@
+cat > .gitignore << 'EOF'
+# Секретные файлы
 .env
-players.json
+
+# Python
 __pycache__/
-*.pyc
-.venv/
-venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# База данных (локальная)
+game.db
 *.db
-*.backup
+
+# Логи
+*.log
+
+# Тесты
+.pytest_cache/
+.coverage
+htmlcov/
+EOF
