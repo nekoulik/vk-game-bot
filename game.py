@@ -37,7 +37,7 @@ ITEMS = {
     8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
 }
 
-ITEM_EMOJI = {1: "🧪", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "️", 6: "👑", 7: "💎", 8: ""}
+ITEM_EMOJI = {1: "🧪", 2: "⚔️", 3: "⚔️", 4: "️", 5: "️", 6: "👑", 7: "💎", 8: ""}
 
 BOSS_LEVELS = {
     1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
@@ -93,7 +93,7 @@ HELP_TEXT = (
 def show_shop(peer_id):
     lines = ["Магазин предметов\n"]
     for item_id, item in ITEMS.items():
-        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '📦')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
+        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
     lines.append("Чтобы купить: купить <номер>")
     send(peer_id, "\n".join(lines))
 
@@ -184,7 +184,6 @@ def claim_daily_bonus(player, peer_id):
     player["last_bonus"] = today
     reward = 50 + min(player["bonus_streak"], 10) * 10
     
-    # Бонус питомца к ежедневному бонусу
     pet_daily_bonus = db.get_pet_bonus(player["user_id"], "daily")
     if pet_daily_bonus > 0:
         reward = int(reward * (1 + pet_daily_bonus))
@@ -201,7 +200,6 @@ def get_player_damage(player):
     if eq.get("weapon") and eq["weapon"] in ITEMS:
         base += ITEMS[eq["weapon"]]["effect"].get("damage", 0)
     
-    # Бонус питомца к урону
     pet_bonus = db.get_pet_bonus(player["user_id"], "damage")
     if pet_bonus > 0:
         base = int(base * (1 + pet_bonus))
@@ -229,14 +227,12 @@ def play_duel_vs_bot(player, peer_id):
     
     if hp2 <= 0 and hp1 > 0:
         reward = random.randint(30, 70)
-        # Бонус питомца к монетам
         pet_coin_bonus = db.get_pet_bonus(player["user_id"], "coins")
         if pet_coin_bonus > 0:
             reward = int(reward * (1 + pet_coin_bonus))
         
         player["balance"] += reward
         exp_gain = 3
-        # Бонус питомца к опыту
         pet_exp_bonus = db.get_pet_bonus(player["user_id"], "exp")
         if pet_exp_bonus > 0:
             exp_gain = int(exp_gain * (1 + pet_exp_bonus))
@@ -329,7 +325,7 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.save_player(p2)
         db.update_daily_progress(p1["user_id"], "duels", 1)
         achs = db.check_achievements_on_action(p1["user_id"], p1, "duel_win")
-        res = f" Победил {p1['name']}! +{reward} монет." + ("\n Достижение: " + ", ".join(achs) if achs else "")
+        res = f"🏆 Победил {p1['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     elif hp2 > 0 and hp1 <= 0:
         reward = random.randint(50, 100)
         pet_coin_bonus = db.get_pet_bonus(p2["user_id"], "coins")
@@ -416,7 +412,6 @@ def defeat_boss(boss):
         reward = int(BOSS_LEVELS[boss["level"]]["reward"] * share)
         exp = int(BOSS_LEVELS[boss["level"]]["exp"] * share)
         
-        # Бонус питомца
         pet_coin_bonus = db.get_pet_bonus(p["player_id"], "coins")
         if pet_coin_bonus > 0:
             reward = int(reward * (1 + pet_coin_bonus))
@@ -487,7 +482,6 @@ def handle(user_id, peer_id, text):
             return
         earned = random.randint(20, 80)
         
-        # Бонус питомца к монетам с работы
         pet_coin_bonus = db.get_pet_bonus(user_id, "coins")
         if pet_coin_bonus > 0:
             earned = int(earned * (1 + pet_coin_bonus))
@@ -537,7 +531,6 @@ def handle(user_id, peer_id, text):
     if command in ["профиль", "profile"]:
         eq = db.get_equipment(player["user_id"])
         cos = f"\nУкрашение: {ITEM_EMOJI.get(eq['cosmetic'], '')} {ITEMS[eq['cosmetic']]['name']}" if eq.get("cosmetic") and eq["cosmetic"] in ITEMS else ""
-        # Показываем активного питомца
         active_pet_id = db.get_active_pet(user_id)
         pet_info = ""
         if active_pet_id and active_pet_id in PETS:
@@ -551,11 +544,54 @@ def handle(user_id, peer_id, text):
     if command in ["инвентарь", "inv"]:
         show_inventory(player, peer_id)
         return
-    if command.startswith("купить "):
-        buy_item(player, peer_id, command.split()[1])
+    
+    # === ВАЖНО: Сначала специальные команды покупки! ===
+    if command.startswith("купить питомца ") or command.startswith("buy pet "):
+        parts = command.split()
+        if len(parts) < 3:
+            send(peer_id, "Формат: купить питомца <id>")
+            return
+        try:
+            pet_id = int(parts[2])
+        except ValueError:
+            send(peer_id, "ID должен быть числом")
+            return
+        
+        if pet_id not in PETS:
+            send(peer_id, "Такого питомца нет!")
+            return
+        
+        pet = PETS[pet_id]
+        if player["balance"] < pet["price"]:
+            send(peer_id, f"Недостаточно монет! Нужно {pet['price']}")
+            return
+        
+        owned = db.get_player_pets(user_id)
+        if any(p["pet_id"] == pet_id for p in owned):
+            send(peer_id, f"У тебя уже есть {pet['emoji']} {pet['name']}!")
+            return
+        
+        player["balance"] -= pet["price"]
+        db.save_player(player)
+        db.buy_pet(user_id, pet_id)
+        send(peer_id, f"🎉 Ты купил {pet['emoji']} {pet['name']}!\n{pet['desc']}\n\nАктивируй: активировать {pet_id}")
         return
+    
+    # Обычная покупка предметов
+    if command.startswith("купить ") or command.startswith("buy "):
+        parts = command.split()
+        if len(parts) < 2:
+            send(peer_id, "Формат: купить <номер>")
+            return
+        buy_item(player, peer_id, parts[1])
+        return
+    
     if command.startswith("экипировать ") or command.startswith("использовать "):
-        use_item(player, peer_id, command.split()[1])
+        parts = command.split()
+        if len(parts) < 2:
+            send(peer_id, "Формат: экипировать <номер>")
+            return
+        use_item(player, peer_id, parts[1])
         return
     if command.startswith("вызов ") or command.startswith("pvp "):
         opp = parse_user_id_from_mention(text)
@@ -611,44 +647,13 @@ def handle(user_id, peer_id, text):
         send(peer_id, "\n".join(lines))
         return
     
-    if command.startswith("купить питомца ") or command.startswith("buy pet "):
-        parts = command.split()
-        if len(parts) < 3:
-            send(peer_id, "Формат: купить питомца <id>")
-            return
-        try:
-            pet_id = int(parts[2])
-        except ValueError:
-            send(peer_id, "ID должен быть числом")
-            return
-        
-        if pet_id not in PETS:
-            send(peer_id, "Такого питомца нет!")
-            return
-        
-        pet = PETS[pet_id]
-        if player["balance"] < pet["price"]:
-            send(peer_id, f"Недостаточно монет! Нужно {pet['price']}")
-            return
-        
-        owned = db.get_player_pets(user_id)
-        if any(p["pet_id"] == pet_id for p in owned):
-            send(peer_id, f"У тебя уже есть {pet['emoji']} {pet['name']}!")
-            return
-        
-        player["balance"] -= pet["price"]
-        db.save_player(player)
-        db.buy_pet(user_id, pet_id)
-        send(peer_id, f" Ты купил {pet['emoji']} {pet['name']}!\n{pet['desc']}\n\nАктивируй: активировать {pet_id}")
-        return
-    
     if command in ["мои питомцы", "my pets"]:
         owned = db.get_player_pets(user_id)
         if not owned:
             send(peer_id, "У тебя пока нет питомцев. Загляни в магазин: питомцы")
             return
         
-        lines = [" Твои питомцы:\n"]
+        lines = ["🐾 Твои питомцы:\n"]
         for p in owned:
             pet = PETS.get(p["pet_id"])
             if pet:
