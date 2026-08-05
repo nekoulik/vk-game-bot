@@ -19,7 +19,7 @@ if not TOKEN or not GROUP_ID:
     raise SystemExit("Создай файл .env и укажи VK_TOKEN и VK_GROUP_ID")
 
 # ==================== АДМИНЫ ====================
-ADMIN_IDS = []
+ADMIN_IDS = [229750018]
 try:
     admin_ids_str = os.getenv("ADMIN_IDS", "")
     if admin_ids_str:
