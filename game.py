@@ -20,12 +20,6 @@ if not TOKEN or not GROUP_ID:
 
 # ==================== АДМИНЫ ====================
 ADMIN_IDS = [229750018]
-try:
-    admin_ids_str = os.getenv("ADMIN_IDS", "")
-    if admin_ids_str:
-        ADMIN_IDS = [int(x.strip()) for x in admin_ids_str.split(",")]
-except Exception:
-    pass
 
 def is_admin(user_id):
     return user_id in ADMIN_IDS
@@ -49,7 +43,7 @@ ITEMS = {
     8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
 }
 
-ITEM_EMOJI = {1: "🧪", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "️", 6: "👑", 7: "💎", 8: ""}
+ITEM_EMOJI = {1: "", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "🛡️", 6: "👑", 7: "💎", 8: "🧪"}
 
 BOSS_LEVELS = {
     1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
@@ -100,14 +94,15 @@ HELP_TEXT = (
     "Прогресс: квесты, выполнить квесты, достижения\n"
     "Питомцы: питомцы, купить питомца <id>, мои питомцы, активировать <id>\n"
     "Сезоны: сезон, история сезонов\n"
-    "Игры: игры, кнб <камень|ножницы|бумага>, угадай <число>, лотерея"
+    "Игры: игры, кнб <камень|ножницы|бумага>, угадай <число>, лотерея\n"
+    "Напоминания: напоминания, включить <тип>, выключить <тип>"
 )
 
 
 def show_shop(peer_id):
     lines = ["Магазин предметов\n"]
     for item_id, item in ITEMS.items():
-        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '📦')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
+        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
     lines.append("Чтобы купить: купить <номер>")
     send(peer_id, "\n".join(lines))
 
@@ -128,7 +123,7 @@ def buy_item(player, peer_id, item_id_str):
     player["balance"] -= item["price"]
     db.save_player(player)
     db.add_to_inventory(player["user_id"], item_id, 1)
-    send(peer_id, f"Куплено: {ITEM_EMOJI.get(item_id, '📦')} {item['name']} за {item['price']} монет!")
+    send(peer_id, f"Куплено: {ITEM_EMOJI.get(item_id, '')} {item['name']} за {item['price']} монет!")
 
 
 def show_inventory(player, peer_id):
@@ -257,7 +252,7 @@ def play_duel_vs_bot(player, peer_id):
         db.update_daily_progress(player["user_id"], "duels", 1)
         db.add_season_points(player["user_id"], 10)
         achs = db.check_achievements_on_action(player["user_id"], player, "duel_win")
-        ach_msg = "\n Достижение: " + ", ".join(achs) if achs else ""
+        ach_msg = "\n🏆 Достижение: " + ", ".join(achs) if achs else ""
         send(peer_id, f"Победа! +{reward} монет.{ach_msg}")
     else:
         add_exp(player, 1)
@@ -364,7 +359,7 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.save_player(p2)
         res = "Ничья."
     
-    msg = f"️ PvP дуэль:\n" + "\n".join(log[-5:]) + f"\n\n{res}"
+    msg = f"⚔️ PvP дуэль:\n" + "\n".join(log[-5:]) + f"\n\n{res}"
     send(peer1, msg)
     if peer2 != peer1:
         send(peer2, msg)
@@ -396,6 +391,24 @@ def create_new_boss(user_id, peer_id):
             "participants": [{"player_id": user_id, "name": player["name"], "damage": 0, "peer_id": peer_id}]}
     db.save_boss(data)
     send(peer_id, f"👹 {boss['name']} (ур. {lvl}) появился!\nHP: {boss['hp']}\nПиши 'атака'!")
+    
+    # Уведомить всех игроков о появлении босса
+    try:
+        all_players = db.get_all_peer_ids()
+        for p in all_players:
+            if p["user_id"] == user_id:
+                continue  # Уже отправили
+            if db.should_notify(p["user_id"], "boss", cooldown_hours=2):
+                try:
+                    send(p["last_peer_id"], 
+                         f"👹 Появился новый босс: {boss['name']} (ур. {lvl})!\n"
+                         f"HP: {boss['hp']}\n"
+                         f"Напиши: босс")
+                    db.update_last_notification(p["user_id"], "boss")
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"Ошибка рассылки о боссе: {e}")
 
 
 def attack_boss(user_id, peer_id):
@@ -444,7 +457,7 @@ def defeat_boss(boss):
         db.update_daily_progress(p["player_id"], "boss", 1)
         db.add_season_points(p["player_id"], 20)
         achs = db.check_achievements_on_action(p["player_id"], pl, "boss_kill")
-        ach_msg = " 🏆 " + ", ".join(achs) if achs else ""
+        ach_msg = "  " + ", ".join(achs) if achs else ""
         msgs.append(f"{p['name']}: +{reward}💰, +{exp}⭐ (урон: {p['damage']}){ach_msg}")
     boss["active"] = False
     db.save_boss(boss)
@@ -473,6 +486,36 @@ def leave_boss_fight(user_id, peer_id):
     send(peer_id, "Ты покинул бой.")
 
 
+# ==================== УВЕДОМЛЕНИЯ ====================
+def check_and_send_notifications(user_id, peer_id, player):
+    """Проверить и отправить уведомления игроку."""
+    notifications = []
+    
+    # Проверка ежедневного бонуса
+    today = datetime.date.today().isoformat()
+    if player.get("last_bonus") != today:
+        if db.should_notify(user_id, "daily_bonus", cooldown_hours=12):
+            notifications.append(
+                "💰 Не забудь забрать ежедневный бонус!\n"
+                "Напиши: бонус"
+            )
+            db.update_last_notification(user_id, "daily_bonus")
+    
+    # Проверка квестов
+    player = db.check_and_reset_daily_quests(player)
+    quests_status = db.get_daily_quests_status(player)
+    if "⏳" in quests_status and player.get("daily_quest_claimed", 0) == 0:
+        if db.should_notify(user_id, "quests", cooldown_hours=6):
+            notifications.append(
+                "📜 У тебя есть невыполненные квесты!\n"
+                "Напиши: квесты"
+            )
+            db.update_last_notification(user_id, "quests")
+    
+    if notifications:
+        send(peer_id, "🔔 Напоминания:\n\n" + "\n\n".join(notifications))
+
+
 # ==================== ОБРАБОТЧИК ====================
 def handle(user_id, peer_id, text):
     player = db.get_player(user_id, get_name)
@@ -486,6 +529,11 @@ def handle(user_id, peer_id, text):
     player = db.check_and_reset_season(player)
     db.save_player(player)
     player = db.check_and_reset_daily_quests(player)
+    
+    # Уведомления для обычных игроков
+    if not is_admin(user_id):
+        check_and_send_notifications(user_id, peer_id, player)
+    
     command = text.lower().strip()
     if not command:
         return
@@ -680,7 +728,7 @@ def handle(user_id, peer_id, text):
             send(peer_id, "У тебя пока нет питомцев. Загляни в магазин: питомцы")
             return
         
-        lines = [" Твои питомцы:\n"]
+        lines = ["🐾 Твои питомцы:\n"]
         for p in owned:
             pet = PETS.get(p["pet_id"])
             if pet:
@@ -720,13 +768,13 @@ def handle(user_id, peer_id, text):
             return
         
         lines = [f"🏆 Сезонный рейтинг (сезон {current}):\n"]
-        medals = ["", "🥈", ""]
+        medals = ["", "🥈", "🥉"]
         for i, p in enumerate(leaderboard, start=1):
             medal = medals[i-1] if i <= 3 else f"{i}."
             lines.append(f"{medal} {p['name']} — {p['season_points']} очков")
         
         lines.append(f"\nТвои очки: {player.get('season_points', 0)}")
-        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n🥈 500 монет + 'Вице-чемпион'\n🥉 250 монет + 'Бронзовый'")
+        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n🥈 500 монет + 'Вице-чемпион'\n 250 монет + 'Бронзовый'")
         send(peer_id, "\n".join(lines))
         return
     
@@ -744,7 +792,7 @@ def handle(user_id, peer_id, text):
                 lines.append(f"\n🏆 Сезон {current_season_num}:")
             
             pl = db.get_player(h["user_id"], get_name)
-            medal = ["", "🥈", "🥉"][h["position"]-1] if h["position"] <= 3 else f"{h['position']}."
+            medal = ["🥇", "🥈", ""][h["position"]-1] if h["position"] <= 3 else f"{h['position']}."
             lines.append(f"  {medal} {pl['name']} — {h['season_points']} очков (+{h['reward_coins']}💰, '{h['title']}')")
         
         send(peer_id, "\n".join(lines))
@@ -755,16 +803,16 @@ def handle(user_id, peer_id, text):
                      "🪨 Камень-ножницы-бумага:\n"
                      "  кнб <камень|ножницы|бумага>\n"
                      "  Приз за победу: +10 монет\n\n"
-                     "🎲 Угадай число:\n"
+                     " Угадай число:\n"
                      "  угадай <число от 1 до 10>\n"
                      "  Приз: 50 монет\n\n"
-                     "🎫 Лотерея (100 монет):\n"
+                     " Лотерея (100 монет):\n"
                      "  лотерея\n"
                      "  Шанс 30%, приз 200-500 монет")
         return
     
     if command in ["кнб", "камень ножницы бумага", "rps"]:
-        send(peer_id, " Камень-ножницы-бумага!\n\nНапиши: кнб <камень|ножницы|бумага>")
+        send(peer_id, "🪨 Камень-ножницы-бумага!\n\nНапиши: кнб <камень|ножницы|бумага>")
         return
     
     if command.startswith("кнб ") or command.startswith("rps "):
@@ -781,7 +829,7 @@ def handle(user_id, peer_id, text):
         bot_choice = random.choice(["камень", "ножницы", "бумага"])
         
         if player_choice == bot_choice:
-            result = " Ничья!"
+            result = "🤝 Ничья!"
             db.add_season_points(user_id, 1)
         elif (
             (player_choice == "камень" and bot_choice == "ножницы") or
@@ -855,24 +903,75 @@ def handle(user_id, peer_id, text):
             db.save_player(player)
             send(peer_id, f"😔 Не повезло в лотерее...\n\nПопробуй завтра!")
         return
-
+    
+    # === УПРАВЛЕНИЕ УВЕДОМЛЕНИЯМИ ===
+    if command in ["напоминания", "notifications", "уведомления"]:
+        settings = db.get_notification_settings(user_id)
+        if not settings:
+            send(peer_id, "❌ Не удалось получить настройки.")
+            return
+        
+        lines = ["🔔 Настройки уведомлений:\n"]
+        for notif_type, name in db.NOTIFICATION_TYPES.items():
+            status = "✅ ВКЛ" if settings.get(notif_type, False) else "❌ ВЫКЛ"
+            lines.append(f"{status} {name}")
+        
+        lines.append("\nУправление:")
+        lines.append("  включить <тип> — включить уведомление")
+        lines.append("  выключить <тип> — выключить уведомление")
+        lines.append("\nТипы: bonus, quests, boss, inactivity")
+        send(peer_id, "\n".join(lines))
+        return
+    
+    if command.startswith("включить "):
+        parts = command.split()
+        if len(parts) < 2:
+            send(peer_id, "Формат: включить <тип>")
+            return
+        
+        notif_type = parts[1].lower()
+        if notif_type not in db.NOTIFICATION_TYPES:
+            send(peer_id, f"Неизвестный тип. Доступные: {', '.join(db.NOTIFICATION_TYPES.keys())}")
+            return
+        
+        db.set_notification_setting(user_id, notif_type, True)
+        send(peer_id, f"✅ Уведомление '{db.NOTIFICATION_TYPES[notif_type]}' включено!")
+        return
+    
+    if command.startswith("выключить "):
+        parts = command.split()
+        if len(parts) < 2:
+            send(peer_id, "Формат: выключить <тип>")
+            return
+        
+        notif_type = parts[1].lower()
+        if notif_type not in db.NOTIFICATION_TYPES:
+            send(peer_id, f"Неизвестный тип. Доступные: {', '.join(db.NOTIFICATION_TYPES.keys())}")
+            return
+        
+        db.set_notification_setting(user_id, notif_type, False)
+        send(peer_id, f"❌ Уведомление '{db.NOTIFICATION_TYPES[notif_type]}' выключено!")
+        return
+    
     # === АДМИН-КОМАНДЫ ===
     if not is_admin(user_id):
         return
     
     if command in ["админ", "admin"]:
         send(peer_id, "🔧 Админ-панель:\n\n"
-                     " Статистика:\n"
+                     "📊 Статистика:\n"
                      "  статистика\n\n"
                      "👥 Игроки:\n"
                      "  игроки\n"
                      "  выдать <id> <сумма>\n"
                      "  бан <id>\n"
                      "  разбан <id>\n\n"
-                     " Сезоны:\n"
+                     "🏆 Сезоны:\n"
                      "  сбросить сезон\n\n"
                      "👹 Босс:\n"
-                     "  сбросить босса")
+                     "  сбросить босса\n\n"
+                     "📢 Рассылка:\n"
+                     "  рассылка <текст>")
         return
     
     if command in ["статистика", "stats"]:
@@ -881,7 +980,7 @@ def handle(user_id, peer_id, text):
                      f"👥 Всего игроков: {stats['total_players']}\n"
                      f"💰 Всего монет: {stats['total_coins']}\n"
                      f"⭐ Средний уровень: {stats['avg_level']}\n"
-                     f"⚔️ Всего дуэлей выиграно: {stats['total_duels']}\n"
+                     f"️ Всего дуэлей выиграно: {stats['total_duels']}\n"
                      f"👹 Всего боссов убито: {stats['total_boss_kills']}")
         return
     
@@ -891,10 +990,10 @@ def handle(user_id, peer_id, text):
             send(peer_id, "Нет игроков.")
             return
         
-        lines = [f" Игроки ({len(all_players)}):\n"]
+        lines = [f"👥 Игроки ({len(all_players)}):\n"]
         for i, p in enumerate(all_players[:20], start=1):
             banned = " 🚫" if p["balance"] == -1 else ""
-            lines.append(f"{i}. {p['name']}{banned} — ур. {p['level']}, {p['balance']}💰, {p['season_points']}🏆")
+            lines.append(f"{i}. {p['name']}{banned} — ур. {p['level']}, {p['balance']}💰, {p['season_points']}")
         
         if len(all_players) > 20:
             lines.append(f"\n... и ещё {len(all_players) - 20}")
@@ -978,6 +1077,24 @@ def handle(user_id, peer_id, text):
     if command in ["сбросить босса", "reset boss"]:
         db.clear_boss()
         send(peer_id, "✅ Босс сброшен!")
+        return
+    
+    if command.startswith("рассылка "):
+        message = text[len("рассылка "):].strip()
+        if not message:
+            send(peer_id, "Формат: рассылка <текст сообщения>")
+            return
+        
+        all_players = db.get_all_peer_ids()
+        sent_count = 0
+        for p in all_players:
+            try:
+                send(p["last_peer_id"], f"📢 Важное сообщение от админа:\n\n{message}")
+                sent_count += 1
+            except Exception as e:
+                print(f"Не удалось отправить {p['user_id']}: {e}")
+        
+        send(peer_id, f"✅ Рассылка отправлена {sent_count} игрокам!")
         return
 
     # Неизвестная команда — молчим
