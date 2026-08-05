@@ -37,7 +37,7 @@ ITEMS = {
     8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
 }
 
-ITEM_EMOJI = {1: "🧪", 2: "⚔️", 3: "⚔️", 4: "️", 5: "️", 6: "👑", 7: "💎", 8: ""}
+ITEM_EMOJI = {1: "🧪", 2: "️", 3: "⚔️", 4: "🛡️", 5: "🛡️", 6: "", 7: "💎", 8: "🧪"}
 
 BOSS_LEVELS = {
     1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
@@ -86,14 +86,15 @@ HELP_TEXT = (
     "PvP: вызов @id123, принять, отклонить\n"
     "Босс: босс, атака, статус, сдаться\n"
     "Прогресс: квесты, выполнить квесты, достижения\n"
-    "Питомцы: питомцы, купить питомца <id>, мои питомцы, активировать <id>"
+    "Питомцы: питомцы, купить питомца <id>, мои питомцы, активировать <id>\n"
+    "Сезоны: сезон, история сезонов"
 )
 
 
 def show_shop(peer_id):
     lines = ["Магазин предметов\n"]
     for item_id, item in ITEMS.items():
-        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
+        lines.append(f"{item_id}. {ITEM_EMOJI.get(item_id, '📦')} {item['name']} — {item['price']} монет\n   {item['desc']}\n")
     lines.append("Чтобы купить: купить <номер>")
     send(peer_id, "\n".join(lines))
 
@@ -167,7 +168,8 @@ def show_top(peer_id):
     medals = ["1 место", "2 место", "3 место"]
     lines = ["Топ игроков:\n"]
     for i, p in enumerate(ranked, start=1):
-        lines.append(f"{medals[i-1] if i <= 3 else f'{i}.'} {p['name']} — ур. {p['level']}, {p['balance']} монет")
+        title = f" [{p['title']}]" if p.get("title") else ""
+        lines.append(f"{medals[i-1] if i <= 3 else f'{i}.'} {p['name']}{title} — ур. {p['level']}, {p['balance']} монет")
     send(peer_id, "\n".join(lines))
 
 
@@ -240,6 +242,7 @@ def play_duel_vs_bot(player, peer_id):
         add_exp(player, exp_gain)
         db.save_player(player)
         db.update_daily_progress(player["user_id"], "duels", 1)
+        db.add_season_points(player["user_id"], 10)
         achs = db.check_achievements_on_action(player["user_id"], player, "duel_win")
         ach_msg = "\n🏆 Достижение: " + ", ".join(achs) if achs else ""
         send(peer_id, f"Победа! +{reward} монет.{ach_msg}")
@@ -324,8 +327,9 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.save_player(p1)
         db.save_player(p2)
         db.update_daily_progress(p1["user_id"], "duels", 1)
+        db.add_season_points(p1["user_id"], 15)
         achs = db.check_achievements_on_action(p1["user_id"], p1, "duel_win")
-        res = f"🏆 Победил {p1['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
+        res = f" Победил {p1['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     elif hp2 > 0 and hp1 <= 0:
         reward = random.randint(50, 100)
         pet_coin_bonus = db.get_pet_bonus(p2["user_id"], "coins")
@@ -337,8 +341,9 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.save_player(p1)
         db.save_player(p2)
         db.update_daily_progress(p2["user_id"], "duels", 1)
+        db.add_season_points(p2["user_id"], 15)
         achs = db.check_achievements_on_action(p2["user_id"], p2, "duel_win")
-        res = f"🏆 Победил {p2['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
+        res = f" Победил {p2['name']}! +{reward} монет." + ("\n Достижение: " + ", ".join(achs) if achs else "")
     else:
         add_exp(p1, 2)
         add_exp(p2, 2)
@@ -424,6 +429,7 @@ def defeat_boss(boss):
         add_exp(pl, exp)
         db.save_player(pl)
         db.update_daily_progress(p["player_id"], "boss", 1)
+        db.add_season_points(p["player_id"], 20)
         achs = db.check_achievements_on_action(p["player_id"], pl, "boss_kill")
         ach_msg = " 🏆 " + ", ".join(achs) if achs else ""
         msgs.append(f"{p['name']}: +{reward}💰, +{exp}⭐ (урон: {p['damage']}){ach_msg}")
@@ -458,6 +464,7 @@ def leave_boss_fight(user_id, peer_id):
 def handle(user_id, peer_id, text):
     player = db.get_player(user_id, get_name)
     player["last_peer_id"] = peer_id
+    player = db.check_and_reset_season(player)
     db.save_player(player)
     player = db.check_and_reset_daily_quests(player)
     command = text.lower().strip()
@@ -491,6 +498,7 @@ def handle(user_id, peer_id, text):
         add_exp(player, 2)
         db.save_player(player)
         db.update_daily_progress(user_id, "coins", earned)
+        db.add_season_points(user_id, 2)
         db.check_achievements_on_action(user_id, player, "rich")
         pet_msg = f" (с бонусом питомца +{int(pet_coin_bonus*100)}%)" if pet_coin_bonus > 0 else ""
         send(peer_id, f"Ты заработал {earned} монет.{pet_msg}")
@@ -536,7 +544,11 @@ def handle(user_id, peer_id, text):
         if active_pet_id and active_pet_id in PETS:
             pet = PETS[active_pet_id]
             pet_info = f"\nПитомец: {pet['emoji']} {pet['name']} ({pet['desc']})"
-        send(peer_id, f"Профиль\n\nИмя: {player['name']}\nУровень: {player['level']}\nОпыт: {player['exp']}\nБаланс: {player['balance']}\nСерия бонусов: {player.get('bonus_streak', 0)} дн.{cos}{pet_info}")
+        title_info = ""
+        if player.get("title"):
+            title_info = f"\nТитул: {player['title']}"
+        season_info = f"\nСезонные очки: {player.get('season_points', 0)}"
+        send(peer_id, f"Профиль\n\nИмя: {player['name']}\nУровень: {player['level']}\nОпыт: {player['exp']}\nБаланс: {player['balance']}\nСерия бонусов: {player.get('bonus_streak', 0)} дн.{title_info}{season_info}{cos}{pet_info}")
         return
     if command in ["магазин", "shop"]:
         show_shop(peer_id)
@@ -682,6 +694,46 @@ def handle(user_id, peer_id, text):
         db.activate_pet(user_id, pet_id)
         pet = PETS[pet_id]
         send(peer_id, f"✅ {pet['emoji']} {pet['name']} активирован!\n{pet['desc']}")
+        return
+    
+    # === СЕЗОНЫ ===
+    if command in ["сезон", "season", "сезонный рейтинг"]:
+        current = db.get_current_season_number()
+        leaderboard = db.get_season_leaderboard(10)
+        
+        if not leaderboard:
+            send(peer_id, f"Сезон {current} только начался. Пока нет участников.\n\nНачисляй сезонные очки:\n• Дуэль: +10\n• PvP победа: +15\n• Босс: +20\n• Работа: +2")
+            return
+        
+        lines = [f" Сезонный рейтинг (сезон {current}):\n"]
+        medals = ["", "🥈", "🥉"]
+        for i, p in enumerate(leaderboard, start=1):
+            medal = medals[i-1] if i <= 3 else f"{i}."
+            lines.append(f"{medal} {p['name']} — {p['season_points']} очков")
+        
+        lines.append(f"\nТвои очки: {player.get('season_points', 0)}")
+        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n🥈 500 монет + 'Вице-чемпион'\n🥉 250 монет + 'Бронзовый'")
+        send(peer_id, "\n".join(lines))
+        return
+    
+    if command in ["история сезонов", "seasons history"]:
+        history = db.get_season_history()
+        if not history:
+            send(peer_id, "История сезонов пуста.")
+            return
+        
+        lines = ["📜 История сезонов:\n"]
+        current_season_num = None
+        for h in history:
+            if h["season_number"] != current_season_num:
+                current_season_num = h["season_number"]
+                lines.append(f"\n🏆 Сезон {current_season_num}:")
+            
+            pl = db.get_player(h["user_id"], get_name)
+            medal = ["🥇", "🥈", "🥉"][h["position"]-1] if h["position"] <= 3 else f"{h['position']}."
+            lines.append(f"  {medal} {pl['name']} — {h['season_points']} очков (+{h['reward_coins']}💰, '{h['title']}')")
+        
+        send(peer_id, "\n".join(lines))
         return
 
     # Неизвестная команда — молчим
