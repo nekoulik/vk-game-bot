@@ -29,11 +29,11 @@ ACHIEVEMENTS = {
 
 # ==================== ПИТОМЦЫ ====================
 PETS = {
-    1: {"name": "Собака", "emoji": "", "price": 1000, "bonus_damage": 0.05, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0, "desc": "+5% к урону в дуэлях"},
-    2: {"name": "Кот", "emoji": "", "price": 800, "bonus_damage": 0, "bonus_coins": 0.10, "bonus_exp": 0, "bonus_daily": 0, "desc": "+10% к монетам с работы"},
-    3: {"name": "Орёл", "emoji": "", "price": 1200, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+5% к опыту"},
-    4: {"name": "Дракон", "emoji": "", "price": 5000, "bonus_damage": 0.10, "bonus_coins": 0.05, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+10% урона, +5% монет, +5% опыта"},
-    5: {"name": "Кролик", "emoji": "", "price": 600, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0.15, "desc": "+15% к ежедневному бонусу"},
+    1: {"name": "Собака", "emoji": "🐕", "price": 1000, "bonus_damage": 0.05, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0, "desc": "+5% к урону в дуэлях"},
+    2: {"name": "Кот", "emoji": "🐈", "price": 800, "bonus_damage": 0, "bonus_coins": 0.10, "bonus_exp": 0, "bonus_daily": 0, "desc": "+10% к монетам с работы"},
+    3: {"name": "Орёл", "emoji": "🦅", "price": 1200, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+5% к опыту"},
+    4: {"name": "Дракон", "emoji": "🐉", "price": 5000, "bonus_damage": 0.10, "bonus_coins": 0.05, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+10% урона, +5% монет, +5% опыта"},
+    5: {"name": "Кролик", "emoji": "🐰", "price": 600, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0.15, "desc": "+15% к ежедневному бонусу"},
 }
 
 # ==================== СЕЗОНЫ ====================
@@ -163,6 +163,7 @@ def init_db():
         add_column_if_not_exists(conn, "players", "season_points", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "title", "TEXT DEFAULT ''")
         add_column_if_not_exists(conn, "players", "current_season", "INTEGER DEFAULT 1")
+        add_column_if_not_exists(conn, "players", "last_lottery", "TEXT DEFAULT ''")
         
         conn.commit()
     finally:
@@ -241,14 +242,14 @@ def save_player(player):
             """UPDATE players SET name=?, balance=?, level=?, exp=?, last_work=?, last_bonus=?,
                bonus_streak=?, last_peer_id=?, updated_at=?, daily_duels=?, daily_boss_kills=?,
                daily_coins_earned=?, last_quest_date=?, total_duels_won=?, total_boss_kills=?, 
-               daily_quest_claimed=?, season_points=?, title=?, current_season=?
+               daily_quest_claimed=?, season_points=?, title=?, current_season=?, last_lottery=?
                WHERE user_id=?""",
             (player["name"], player["balance"], player["level"], player["exp"], player["last_work"],
              player["last_bonus"], player["bonus_streak"], player.get("last_peer_id"), player["updated_at"],
              player.get("daily_duels", 0), player.get("daily_boss_kills", 0), player.get("daily_coins_earned", 0),
              player.get("last_quest_date", ""), player.get("total_duels_won", 0), player.get("total_boss_kills", 0),
              player.get("daily_quest_claimed", 0), player.get("season_points", 0), player.get("title", ""),
-             player.get("current_season", 1), player["user_id"]))
+             player.get("current_season", 1), player.get("last_lottery", ""), player["user_id"]))
         conn.commit()
     finally:
         conn.close()
@@ -268,29 +269,24 @@ def check_and_reset_daily_quests(player):
 
 # ==================== СЕЗОНЫ ====================
 def get_current_season():
-    """Получить номер текущего сезона (год*12 + месяц)."""
     now = datetime.now()
     return now.year * 12 + now.month
 
 
 def check_and_reset_season(player):
-    """Проверяет, не сменился ли сезон. Если да — завершает старый и начинает новый."""
     current_season = get_current_season()
     player_season = player.get("current_season", 1)
     
     if player_season == current_season:
-        return player  # Сезон тот же
+        return player
     
-    # Сезон сменился — завершаем старый (только один игрок должен это сделать)
     conn = get_conn()
     try:
-        # Проверяем, обработан ли уже этот сезон
         existing = conn.execute(
             "SELECT COUNT(*) FROM seasons WHERE season_number = ?", (player_season,)
         ).fetchone()[0]
         
         if existing == 0:
-            # Завершаем сезон: берём топ-3 по сезонным очкам
             top_players = conn.execute(
                 """SELECT user_id, name, season_points, balance 
                    FROM players WHERE season_points > 0
@@ -301,12 +297,10 @@ def check_and_reset_season(player):
             for pos, row in enumerate(top_players, start=1):
                 if pos in SEASON_REWARDS:
                     reward = SEASON_REWARDS[pos]
-                    # Выдаём награды
                     conn.execute(
                         "UPDATE players SET balance = balance + ?, title = ? WHERE user_id = ?",
                         (reward["coins"], reward["title"], row["user_id"])
                     )
-                    # Сохраняем в историю
                     conn.execute(
                         """INSERT INTO seasons 
                            (season_number, user_id, position, season_points, reward_coins, title, ended_at)
@@ -315,7 +309,6 @@ def check_and_reset_season(player):
                          reward["coins"], reward["title"], now)
                     )
             
-            # Сбрасываем сезонные очки у всех
             conn.execute("UPDATE players SET season_points = 0")
             conn.execute("UPDATE players SET current_season = ?", (current_season,))
             conn.commit()
@@ -328,7 +321,6 @@ def check_and_reset_season(player):
 
 
 def add_season_points(user_id, points):
-    """Добавить сезонные очки."""
     conn = get_conn()
     try:
         conn.execute(
@@ -341,7 +333,6 @@ def add_season_points(user_id, points):
 
 
 def get_season_leaderboard(limit=10):
-    """Получить текущий рейтинг сезона."""
     conn = get_conn()
     try:
         rows = conn.execute(
@@ -356,7 +347,6 @@ def get_season_leaderboard(limit=10):
 
 
 def get_season_history(season_number=None):
-    """Получить историю сезонов."""
     conn = get_conn()
     try:
         if season_number:
@@ -376,8 +366,8 @@ def get_season_history(season_number=None):
     finally:
         conn.close()
 
+
 def get_current_season_number():
-    """Вернуть номер текущего сезона."""
     return get_current_season()
 
 
@@ -422,7 +412,7 @@ def claim_daily_quests(player):
         if current >= q_data["target"]:
             total_coins += q_data["reward_coins"]
             total_exp += q_data["reward_exp"]
-            completed.append(f"✅ {q_data['name']} (+{q_data['reward_coins']}, +{q_data['reward_exp']}⭐)")
+            completed.append(f"✅ {q_data['name']} (+{q_data['reward_coins']}💰, +{q_data['reward_exp']}⭐)")
 
     if not completed:
         return False, "Ни один квест ещё не выполнен. Продолжай играть!"
@@ -436,7 +426,7 @@ def claim_daily_quests(player):
     player["daily_quest_claimed"] = 1
     save_player(player)
     
-    msg = f" Квесты выполнены!\n\n" + "\n".join(completed)
+    msg = "🎉 Квесты выполнены!\n\n" + "\n".join(completed)
     msg += f"\n\n💰 Всего: +{total_coins} монет\n⭐ Всего: +{total_exp} опыта"
     return True, msg
 
@@ -458,13 +448,13 @@ def get_daily_quests_status(player):
             current = 0
             
         target = q_data["target"]
-        status = "✅" if current >= target else ""
-        lines.append(f"{status} {q_data['name']} ({current}/{target}) — {q_data['reward_coins']}, {q_data['reward_exp']}⭐")
+        status = "✅" if current >= target else "⏳"
+        lines.append(f"{status} {q_data['name']} ({current}/{target}) — {q_data['reward_coins']}💰, {q_data['reward_exp']}⭐")
     
     if player.get("daily_quest_claimed", 0) == 1:
         lines.append("\n✅ Награды уже получены сегодня.")
     else:
-        lines.append("\n Напиши 'выполнить квесты' чтобы забрать награды за завершённые.")
+        lines.append("\n💡 Напиши 'выполнить квесты' чтобы забрать награды за завершённые.")
     
     return "\n".join(lines)
 
@@ -487,7 +477,7 @@ def get_achievements_list(user_id):
     conn = get_conn()
     try:
         unlocked = [row["achievement_id"] for row in conn.execute("SELECT achievement_id FROM achievements WHERE user_id = ?", (user_id,)).fetchall()]
-        lines = ["🏆 Достижения:\n"]
+        lines = [" Достижения:\n"]
         for ach_id, data in ACHIEVEMENTS.items():
             if ach_id in unlocked:
                 lines.append(f"✅ {data['name']}: {data['desc']}")
@@ -520,7 +510,7 @@ def check_achievements_on_action(user_id, player, action):
     return new_achs
 
 
-# ==================== ФУНКЦИИ ДЛЯ ПИТОМЦЕВ ====================
+# ==================== ПИТОМЦЫ ====================
 def get_player_pets(user_id):
     conn = get_conn()
     try:
@@ -694,6 +684,131 @@ def clear_boss():
         conn.execute("DELETE FROM boss WHERE id = 1")
         conn.execute("DELETE FROM boss_participants WHERE boss_id = 1")
         conn.commit()
+    finally:
+        conn.close()
+
+
+# ==================== АДМИНИСТРИРОВАНИЕ ====================
+def get_all_players():
+    """Получить всех игроков."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT user_id, name, balance, level, exp, season_points, title, last_bonus, bonus_streak "
+            "FROM players ORDER BY level DESC, balance DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def add_coins_to_player(user_id, amount):
+    """Выдать монеты игроку."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE players SET balance = balance + ? WHERE user_id = ?",
+            (amount, user_id)
+        )
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def ban_player(user_id):
+    """Забанить игрока (установить баланс в -1)."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE players SET balance = -1 WHERE user_id = ?",
+            (user_id,)
+        )
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def unban_player(user_id):
+    """Разбанить игрока (восстановить баланс)."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE players SET balance = 100 WHERE user_id = ? AND balance = -1",
+            (user_id,)
+        )
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def is_player_banned(user_id):
+    """Проверить, забанен ли игрок."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT balance FROM players WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        return row and row["balance"] == -1
+    finally:
+        conn.close()
+
+
+def get_stats():
+    """Получить общую статистику."""
+    conn = get_conn()
+    try:
+        total_players = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+        total_coins = conn.execute("SELECT SUM(balance) FROM players WHERE balance > 0").fetchone()[0] or 0
+        avg_level = conn.execute("SELECT AVG(level) FROM players").fetchone()[0] or 0
+        total_duels = conn.execute("SELECT SUM(total_duels_won) FROM players").fetchone()[0] or 0
+        total_boss_kills = conn.execute("SELECT SUM(total_boss_kills) FROM players").fetchone()[0] or 0
+        
+        return {
+            "total_players": total_players,
+            "total_coins": total_coins,
+            "avg_level": round(avg_level, 2),
+            "total_duels": total_duels,
+            "total_boss_kills": total_boss_kills,
+        }
+    finally:
+        conn.close()
+
+
+def force_reset_season():
+    """Принудительно сбросить сезон."""
+    current = get_current_season()
+    conn = get_conn()
+    try:
+        top_players = conn.execute(
+            """SELECT user_id, name, season_points, balance 
+               FROM players WHERE season_points > 0
+               ORDER BY season_points DESC LIMIT 3"""
+        ).fetchall()
+        
+        now = datetime.now().isoformat()
+        for pos, row in enumerate(top_players, start=1):
+            if pos in SEASON_REWARDS:
+                reward = SEASON_REWARDS[pos]
+                conn.execute(
+                    "UPDATE players SET balance = balance + ?, title = ? WHERE user_id = ?",
+                    (reward["coins"], reward["title"], row["user_id"])
+                )
+                conn.execute(
+                    """INSERT INTO seasons 
+                       (season_number, user_id, position, season_points, reward_coins, title, ended_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (current, row["user_id"], pos, row["season_points"],
+                     reward["coins"], reward["title"], now)
+                )
+        
+        conn.execute("UPDATE players SET season_points = 0")
+        conn.execute("UPDATE players SET current_season = ?", (current + 1,))
+        conn.commit()
+        return len(top_players)
     finally:
         conn.close()
 
