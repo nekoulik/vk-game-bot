@@ -37,7 +37,7 @@ ITEMS = {
     8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
 }
 
-ITEM_EMOJI = {1: "🧪", 2: "️", 3: "⚔️", 4: "🛡️", 5: "🛡️", 6: "", 7: "💎", 8: "🧪"}
+ITEM_EMOJI = {1: "", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "️", 6: "👑", 7: "💎", 8: ""}
 
 BOSS_LEVELS = {
     1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
@@ -87,7 +87,8 @@ HELP_TEXT = (
     "Босс: босс, атака, статус, сдаться\n"
     "Прогресс: квесты, выполнить квесты, достижения\n"
     "Питомцы: питомцы, купить питомца <id>, мои питомцы, активировать <id>\n"
-    "Сезоны: сезон, история сезонов"
+    "Сезоны: сезон, история сезонов\n"
+    "Игры: игры, кнб <камень|ножницы|бумага>, угадай <число>, лотерея"
 )
 
 
@@ -329,7 +330,7 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.update_daily_progress(p1["user_id"], "duels", 1)
         db.add_season_points(p1["user_id"], 15)
         achs = db.check_achievements_on_action(p1["user_id"], p1, "duel_win")
-        res = f" Победил {p1['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
+        res = f" Победил {p1['name']}! +{reward} монет." + ("\n Достижение: " + ", ".join(achs) if achs else "")
     elif hp2 > 0 and hp1 <= 0:
         reward = random.randint(50, 100)
         pet_coin_bonus = db.get_pet_bonus(p2["user_id"], "coins")
@@ -343,7 +344,7 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.update_daily_progress(p2["user_id"], "duels", 1)
         db.add_season_points(p2["user_id"], 15)
         achs = db.check_achievements_on_action(p2["user_id"], p2, "duel_win")
-        res = f" Победил {p2['name']}! +{reward} монет." + ("\n Достижение: " + ", ".join(achs) if achs else "")
+        res = f"🏆 Победил {p2['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     else:
         add_exp(p1, 2)
         add_exp(p2, 2)
@@ -411,7 +412,7 @@ def attack_boss(user_id, peer_id):
 
 def defeat_boss(boss):
     total_dmg = sum(p["damage"] for p in boss["participants"])
-    msgs = [f"👹 {boss['name']} повержен!\n\nНаграды:"]
+    msgs = [f" {boss['name']} повержен!\n\nНаграды:"]
     for p in boss["participants"]:
         share = p["damage"] / total_dmg if total_dmg > 0 else 1 / len(boss["participants"])
         reward = int(BOSS_LEVELS[boss["level"]]["reward"] * share)
@@ -444,7 +445,7 @@ def show_boss_status(user_id, peer_id):
     if not boss or not boss.get("active"):
         send(peer_id, "Нет активного боя.")
         return
-    lines = [f"👹 {boss['name']} (ур. {boss['level']})", f"HP: {boss['current_hp']}/{boss['max_hp']}", f"Участников: {len(boss.get('participants', []))}"]
+    lines = [f" {boss['name']} (ур. {boss['level']})", f"HP: {boss['current_hp']}/{boss['max_hp']}", f"Участников: {len(boss.get('participants', []))}"]
     for p in boss.get("participants", []):
         if p["player_id"] == user_id:
             lines.append(f"Твой урон: {p['damage']}")
@@ -705,14 +706,14 @@ def handle(user_id, peer_id, text):
             send(peer_id, f"Сезон {current} только начался. Пока нет участников.\n\nНачисляй сезонные очки:\n• Дуэль: +10\n• PvP победа: +15\n• Босс: +20\n• Работа: +2")
             return
         
-        lines = [f" Сезонный рейтинг (сезон {current}):\n"]
-        medals = ["", "🥈", "🥉"]
+        lines = [f"🏆 Сезонный рейтинг (сезон {current}):\n"]
+        medals = ["", "🥈", ""]
         for i, p in enumerate(leaderboard, start=1):
             medal = medals[i-1] if i <= 3 else f"{i}."
             lines.append(f"{medal} {p['name']} — {p['season_points']} очков")
         
         lines.append(f"\nТвои очки: {player.get('season_points', 0)}")
-        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n🥈 500 монет + 'Вице-чемпион'\n🥉 250 монет + 'Бронзовый'")
+        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n 500 монет + 'Вице-чемпион'\n🥉 250 монет + 'Бронзовый'")
         send(peer_id, "\n".join(lines))
         return
     
@@ -734,6 +735,126 @@ def handle(user_id, peer_id, text):
             lines.append(f"  {medal} {pl['name']} — {h['season_points']} очков (+{h['reward_coins']}💰, '{h['title']}')")
         
         send(peer_id, "\n".join(lines))
+        return
+    
+    # === МИНИ-ИГРЫ ===
+    if command in ["игры", "мини-игры", "games"]:
+        send(peer_id, "🎮 Мини-игры:\n\n"
+                     " Камень-ножницы-бумага:\n"
+                     "  кнб <камень|ножницы|бумага>\n"
+                     "  Приз за победу: +10 монет\n\n"
+                     "🎲 Угадай число:\n"
+                     "  угадай <число от 1 до 10>\n"
+                     "  Приз: 50 монет\n\n"
+                     "🎫 Лотерея (100 монет):\n"
+                     "  лотерея\n"
+                     "  Шанс 30%, приз 200-500 монет")
+        return
+    
+    if command in ["кнб", "камень ножницы бумага", "rps"]:
+        send(peer_id, "🪨 Камень-ножницы-бумага!\n\n"
+                     "Напиши: кнб <камень|ножницы|бумага>")
+        return
+    
+    if command.startswith("кнб ") or command.startswith("rps "):
+        parts = command.split()
+        if len(parts) < 2:
+            send(peer_id, "Формат: кнб <камень|ножницы|бумага>")
+            return
+        
+        player_choice = parts[1].lower()
+        if player_choice not in ["камень", "ножницы", "бумага"]:
+            send(peer_id, "Выбери: камень, ножницы или бумага")
+            return
+        
+        bot_choice = random.choice(["камень", "ножницы", "бумага"])
+        
+        if player_choice == bot_choice:
+            result = "🤝 Ничья!"
+            db.add_season_points(user_id, 1)
+        elif (
+            (player_choice == "камень" and bot_choice == "ножницы") or
+            (player_choice == "ножницы" and bot_choice == "бумага") or
+            (player_choice == "бумага" and bot_choice == "камень")
+        ):
+            result = "🏆 Ты победил! +10 монет"
+            player["balance"] += 10
+            db.add_season_points(user_id, 2)
+        else:
+            result = "😔 Бот победил! Попробуй ещё раз"
+        
+        db.save_player(player)
+        send(peer_id, f" Камень-ножницы-бумага:\n\n"
+                     f"Ты: {player_choice}\n"
+                     f"Бот: {bot_choice}\n\n"
+                     f"{result}")
+        return
+    
+    if command in ["угадай", "угадай число", "guess"]:
+        send(peer_id, "🎲 Угадай число от 1 до 10!\n\n"
+                     "Напиши: угадай <число>")
+        return
+    
+    if command.startswith("угадай ") or command.startswith("guess "):
+        parts = command.split()
+        if len(parts) < 2:
+            send(peer_id, "Формат: угадай <число от 1 до 10>")
+            return
+        
+        try:
+            guess = int(parts[1])
+        except ValueError:
+            send(peer_id, "Число должно быть от 1 до 10")
+            return
+        
+        if guess < 1 or guess > 10:
+            send(peer_id, "Число должно быть от 1 до 10")
+            return
+        
+        secret = random.randint(1, 10)
+        
+        if guess == secret:
+            reward = 50
+            player["balance"] += reward
+            db.save_player(player)
+            db.add_season_points(user_id, 5)
+            send(peer_id, f"🎉 Угадал! Загаданное число: {secret}\n"
+                         f"Награда: +{reward} монет!")
+        else:
+            send(peer_id, f"😔 Не угадал! Загаданное число: {secret}\n"
+                         f"Твоё число: {guess}\n"
+                         f"Попробуй ещё раз: угадай <число>")
+        return
+    
+    if command in ["лотерея", "lottery"]:
+        last_lottery = player.get("last_lottery", "")
+        today = datetime.date.today().isoformat()
+        
+        if last_lottery == today:
+            send(peer_id, "🎫 Ты уже покупал лотерейный билет сегодня!\n"
+                         "Приходи завтра.")
+            return
+        
+        ticket_price = 100
+        if player["balance"] < ticket_price:
+            send(peer_id, f" Билет стоит {ticket_price} монет.\n"
+                         f"У тебя недостаточно монет.")
+            return
+        
+        player["balance"] -= ticket_price
+        player["last_lottery"] = today
+        
+        if random.random() < 0.3:
+            prize = random.randint(200, 500)
+            player["balance"] += prize
+            db.save_player(player)
+            send(peer_id, f"🎉 ПОБЕДА В ЛОТЕРЕЕ!\n\n"
+                         f"Ты выиграл {prize} монет!\n"
+                         f"Чистая прибыль: {prize - ticket_price} монет")
+        else:
+            db.save_player(player)
+            send(peer_id, f"😔 Не повезло в лотерее...\n\n"
+                         f"Попробуй завтра!")
         return
 
     # Неизвестная команда — молчим
