@@ -30,10 +30,17 @@ ACHIEVEMENTS = {
 # ==================== ПИТОМЦЫ ====================
 PETS = {
     1: {"name": "Собака", "emoji": "", "price": 1000, "bonus_damage": 0.05, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0, "desc": "+5% к урону в дуэлях"},
-    2: {"name": "Кот", "emoji": "🐈", "price": 800, "bonus_damage": 0, "bonus_coins": 0.10, "bonus_exp": 0, "bonus_daily": 0, "desc": "+10% к монетам с работы"},
+    2: {"name": "Кот", "emoji": "", "price": 800, "bonus_damage": 0, "bonus_coins": 0.10, "bonus_exp": 0, "bonus_daily": 0, "desc": "+10% к монетам с работы"},
     3: {"name": "Орёл", "emoji": "", "price": 1200, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+5% к опыту"},
     4: {"name": "Дракон", "emoji": "", "price": 5000, "bonus_damage": 0.10, "bonus_coins": 0.05, "bonus_exp": 0.05, "bonus_daily": 0, "desc": "+10% урона, +5% монет, +5% опыта"},
-    5: {"name": "Кролик", "emoji": "🐰", "price": 600, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0.15, "desc": "+15% к ежедневному бонусу"},
+    5: {"name": "Кролик", "emoji": "", "price": 600, "bonus_damage": 0, "bonus_coins": 0, "bonus_exp": 0, "bonus_daily": 0.15, "desc": "+15% к ежедневному бонусу"},
+}
+
+# ==================== СЕЗОНЫ ====================
+SEASON_REWARDS = {
+    1: {"coins": 1000, "title": "Чемпион"},
+    2: {"coins": 500, "title": "Вице-чемпион"},
+    3: {"coins": 250, "title": "Бронзовый"},
 }
 
 
@@ -127,10 +134,22 @@ def init_db():
                 PRIMARY KEY (user_id, achievement_id),
                 FOREIGN KEY (user_id) REFERENCES players(user_id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS seasons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                season_number INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                season_points INTEGER NOT NULL,
+                reward_coins INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                ended_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES players(user_id) ON DELETE CASCADE
+            );
             CREATE INDEX IF NOT EXISTS idx_inventory_player ON inventory(player_id);
             CREATE INDEX IF NOT EXISTS idx_players_balance ON players(balance);
             CREATE INDEX IF NOT EXISTS idx_players_level ON players(level);
             CREATE INDEX IF NOT EXISTS idx_pets_player ON pets(player_id);
+            CREATE INDEX IF NOT EXISTS idx_seasons_number ON seasons(season_number);
         """)
         
         add_column_if_not_exists(conn, "players", "daily_duels", "INTEGER DEFAULT 0")
@@ -141,6 +160,9 @@ def init_db():
         add_column_if_not_exists(conn, "players", "total_boss_kills", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "daily_quest_claimed", "INTEGER DEFAULT 0")
         add_column_if_not_exists(conn, "players", "active_pet_id", "INTEGER")
+        add_column_if_not_exists(conn, "players", "season_points", "INTEGER DEFAULT 0")
+        add_column_if_not_exists(conn, "players", "title", "TEXT DEFAULT ''")
+        add_column_if_not_exists(conn, "players", "current_season", "INTEGER DEFAULT 1")
         
         conn.commit()
     finally:
@@ -218,13 +240,15 @@ def save_player(player):
         conn.execute(
             """UPDATE players SET name=?, balance=?, level=?, exp=?, last_work=?, last_bonus=?,
                bonus_streak=?, last_peer_id=?, updated_at=?, daily_duels=?, daily_boss_kills=?,
-               daily_coins_earned=?, last_quest_date=?, total_duels_won=?, total_boss_kills=?, daily_quest_claimed=?
+               daily_coins_earned=?, last_quest_date=?, total_duels_won=?, total_boss_kills=?, 
+               daily_quest_claimed=?, season_points=?, title=?, current_season=?
                WHERE user_id=?""",
             (player["name"], player["balance"], player["level"], player["exp"], player["last_work"],
              player["last_bonus"], player["bonus_streak"], player.get("last_peer_id"), player["updated_at"],
              player.get("daily_duels", 0), player.get("daily_boss_kills", 0), player.get("daily_coins_earned", 0),
              player.get("last_quest_date", ""), player.get("total_duels_won", 0), player.get("total_boss_kills", 0),
-             player.get("daily_quest_claimed", 0), player["user_id"]))
+             player.get("daily_quest_claimed", 0), player.get("season_points", 0), player.get("title", ""),
+             player.get("current_season", 1), player["user_id"]))
         conn.commit()
     finally:
         conn.close()
@@ -240,6 +264,121 @@ def check_and_reset_daily_quests(player):
         player["daily_quest_claimed"] = 0
         save_player(player)
     return player
+
+
+# ==================== СЕЗОНЫ ====================
+def get_current_season():
+    """Получить номер текущего сезона (год*12 + месяц)."""
+    now = datetime.now()
+    return now.year * 12 + now.month
+
+
+def check_and_reset_season(player):
+    """Проверяет, не сменился ли сезон. Если да — завершает старый и начинает новый."""
+    current_season = get_current_season()
+    player_season = player.get("current_season", 1)
+    
+    if player_season == current_season:
+        return player  # Сезон тот же
+    
+    # Сезон сменился — завершаем старый (только один игрок должен это сделать)
+    conn = get_conn()
+    try:
+        # Проверяем, обработан ли уже этот сезон
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM seasons WHERE season_number = ?", (player_season,)
+        ).fetchone()[0]
+        
+        if existing == 0:
+            # Завершаем сезон: берём топ-3 по сезонным очкам
+            top_players = conn.execute(
+                """SELECT user_id, name, season_points, balance 
+                   FROM players WHERE season_points > 0
+                   ORDER BY season_points DESC LIMIT 3"""
+            ).fetchall()
+            
+            now = datetime.now().isoformat()
+            for pos, row in enumerate(top_players, start=1):
+                if pos in SEASON_REWARDS:
+                    reward = SEASON_REWARDS[pos]
+                    # Выдаём награды
+                    conn.execute(
+                        "UPDATE players SET balance = balance + ?, title = ? WHERE user_id = ?",
+                        (reward["coins"], reward["title"], row["user_id"])
+                    )
+                    # Сохраняем в историю
+                    conn.execute(
+                        """INSERT INTO seasons 
+                           (season_number, user_id, position, season_points, reward_coins, title, ended_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (player_season, row["user_id"], pos, row["season_points"],
+                         reward["coins"], reward["title"], now)
+                    )
+            
+            # Сбрасываем сезонные очки у всех
+            conn.execute("UPDATE players SET season_points = 0")
+            conn.execute("UPDATE players SET current_season = ?", (current_season,))
+            conn.commit()
+    finally:
+        conn.close()
+    
+    player["current_season"] = current_season
+    player["season_points"] = 0
+    return player
+
+
+def add_season_points(user_id, points):
+    """Добавить сезонные очки."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE players SET season_points = season_points + ? WHERE user_id = ?",
+            (points, user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_season_leaderboard(limit=10):
+    """Получить текущий рейтинг сезона."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """SELECT user_id, name, season_points, title, level, balance
+               FROM players WHERE season_points > 0
+               ORDER BY season_points DESC LIMIT ?""",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_season_history(season_number=None):
+    """Получить историю сезонов."""
+    conn = get_conn()
+    try:
+        if season_number:
+            rows = conn.execute(
+                """SELECT season_number, user_id, position, season_points, reward_coins, title, ended_at
+                   FROM seasons WHERE season_number = ?
+                   ORDER BY position""",
+                (season_number,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT season_number, user_id, position, season_points, reward_coins, title, ended_at
+                   FROM seasons
+                   ORDER BY season_number DESC, position"""
+            ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+def get_current_season_number():
+    """Вернуть номер текущего сезона."""
+    return get_current_season()
 
 
 def update_daily_progress(user_id, quest_type, amount=1):
@@ -307,7 +446,7 @@ def get_daily_quests_status(player):
     if player.get("last_quest_date") != today:
         player = check_and_reset_daily_quests(player)
 
-    lines = [" Ежедневные задания:\n"]
+    lines = ["📜 Ежедневные задания:\n"]
     for q_type, q_data in DAILY_QUESTS.items():
         if q_type == "duels":
             current = player.get("daily_duels", 0)
@@ -325,7 +464,7 @@ def get_daily_quests_status(player):
     if player.get("daily_quest_claimed", 0) == 1:
         lines.append("\n✅ Награды уже получены сегодня.")
     else:
-        lines.append("\n💡 Напиши 'выполнить квесты' чтобы забрать награды за завершённые.")
+        lines.append("\n Напиши 'выполнить квесты' чтобы забрать награды за завершённые.")
     
     return "\n".join(lines)
 
