@@ -43,7 +43,7 @@ ITEMS = {
     8: {"name": "Большое зелье", "price": 250, "type": "consumable", "desc": "Восстанавливает 70 HP в дуэли", "effect": {"hp": 70}},
 }
 
-ITEM_EMOJI = {1: "", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "🛡️", 6: "👑", 7: "💎", 8: "🧪"}
+ITEM_EMOJI = {1: "", 2: "⚔️", 3: "⚔️", 4: "🛡️", 5: "️", 6: "", 7: "💎", 8: ""}
 
 BOSS_LEVELS = {
     1: {"name": "Гоблин-воин", "hp": 200, "attack": 15, "defense": 5, "reward": 100, "exp": 10},
@@ -77,11 +77,22 @@ def send(peer_id, text):
 
 def add_exp(player, amount=1):
     player["exp"] += amount
+    
+    # Клановый бонус к опыту
+    clan = db.get_clan(player["user_id"])
+    if clan:
+        clan_exp_bonus = db.get_clan_bonus(clan["id"], "exp")
+        if clan_exp_bonus > 0:
+            amount = int(amount * (1 + clan_exp_bonus))
+    
     leveled_up = False
     while player["exp"] >= player["level"] * 10:
         player["exp"] -= player["level"] * 10
         player["level"] += 1
         leveled_up = True
+        # Добавляем опыт клану при повышении уровня
+        if clan:
+            db.add_clan_exp(clan["id"], 10)
     return leveled_up
 
 
@@ -95,7 +106,8 @@ HELP_TEXT = (
     "Питомцы: питомцы, купить питомца <id>, мои питомцы, активировать <id>\n"
     "Сезоны: сезон, история сезонов\n"
     "Игры: игры, кнб <камень|ножницы|бумага>, угадай <число>, лотерея\n"
-    "Напоминания: напоминания, включить <тип>, выключить <тип>"
+    "Напоминания: напоминания, включить <тип>, выключить <тип>\n"
+    "Кланы: клан, клан создать <название>, кланы, клан вступить <ID>"
 )
 
 
@@ -194,6 +206,13 @@ def claim_daily_bonus(player, peer_id):
     player["last_bonus"] = today
     reward = 50 + min(player["bonus_streak"], 10) * 10
     
+    # Клановый бонус к монетам
+    clan = db.get_clan(player["user_id"])
+    if clan:
+        clan_coins_bonus = db.get_clan_bonus(clan["id"], "coins")
+        if clan_coins_bonus > 0:
+            reward = int(reward * (1 + clan_coins_bonus))
+    
     pet_daily_bonus = db.get_pet_bonus(player["user_id"], "daily")
     if pet_daily_bonus > 0:
         reward = int(reward * (1 + pet_daily_bonus))
@@ -210,9 +229,17 @@ def get_player_damage(player):
     if eq.get("weapon") and eq["weapon"] in ITEMS:
         base += ITEMS[eq["weapon"]]["effect"].get("damage", 0)
     
+    # Бонус питомца
     pet_bonus = db.get_pet_bonus(player["user_id"], "damage")
     if pet_bonus > 0:
         base = int(base * (1 + pet_bonus))
+    
+    # Клановый бонус к урону
+    clan = db.get_clan(player["user_id"])
+    if clan:
+        clan_damage_bonus = db.get_clan_bonus(clan["id"], "damage")
+        if clan_damage_bonus > 0:
+            base = int(base * (1 + clan_damage_bonus))
     
     return base
 
@@ -241,6 +268,13 @@ def play_duel_vs_bot(player, peer_id):
         if pet_coin_bonus > 0:
             reward = int(reward * (1 + pet_coin_bonus))
         
+        # Клановый бонус к монетам
+        clan = db.get_clan(player["user_id"])
+        if clan:
+            clan_coins_bonus = db.get_clan_bonus(clan["id"], "coins")
+            if clan_coins_bonus > 0:
+                reward = int(reward * (1 + clan_coins_bonus))
+        
         player["balance"] += reward
         exp_gain = 3
         pet_exp_bonus = db.get_pet_bonus(player["user_id"], "exp")
@@ -251,6 +285,11 @@ def play_duel_vs_bot(player, peer_id):
         db.save_player(player)
         db.update_daily_progress(player["user_id"], "duels", 1)
         db.add_season_points(player["user_id"], 10)
+        
+        # Добавляем опыт клану
+        if clan:
+            db.add_clan_exp(clan["id"], 5)
+        
         achs = db.check_achievements_on_action(player["user_id"], player, "duel_win")
         ach_msg = "\n🏆 Достижение: " + ", ".join(achs) if achs else ""
         send(peer_id, f"Победа! +{reward} монет.{ach_msg}")
@@ -329,6 +368,14 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         pet_coin_bonus = db.get_pet_bonus(p1["user_id"], "coins")
         if pet_coin_bonus > 0:
             reward = int(reward * (1 + pet_coin_bonus))
+        
+        # Клановый бонус
+        clan = db.get_clan(p1["user_id"])
+        if clan:
+            clan_coins_bonus = db.get_clan_bonus(clan["id"], "coins")
+            if clan_coins_bonus > 0:
+                reward = int(reward * (1 + clan_coins_bonus))
+        
         p1["balance"] += reward
         add_exp(p1, 5)
         add_exp(p2, 2)
@@ -336,6 +383,11 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.save_player(p2)
         db.update_daily_progress(p1["user_id"], "duels", 1)
         db.add_season_points(p1["user_id"], 15)
+        
+        # Опыт клану
+        if clan:
+            db.add_clan_exp(clan["id"], 10)
+        
         achs = db.check_achievements_on_action(p1["user_id"], p1, "duel_win")
         res = f"🏆 Победил {p1['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     elif hp2 > 0 and hp1 <= 0:
@@ -343,6 +395,13 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         pet_coin_bonus = db.get_pet_bonus(p2["user_id"], "coins")
         if pet_coin_bonus > 0:
             reward = int(reward * (1 + pet_coin_bonus))
+        
+        clan = db.get_clan(p2["user_id"])
+        if clan:
+            clan_coins_bonus = db.get_clan_bonus(clan["id"], "coins")
+            if clan_coins_bonus > 0:
+                reward = int(reward * (1 + clan_coins_bonus))
+        
         p2["balance"] += reward
         add_exp(p2, 5)
         add_exp(p1, 2)
@@ -350,6 +409,10 @@ def play_pvp_duel(p1, p2, peer1, peer2):
         db.save_player(p2)
         db.update_daily_progress(p2["user_id"], "duels", 1)
         db.add_season_points(p2["user_id"], 15)
+        
+        if clan:
+            db.add_clan_exp(clan["id"], 10)
+        
         achs = db.check_achievements_on_action(p2["user_id"], p2, "duel_win")
         res = f"🏆 Победил {p2['name']}! +{reward} монет." + ("\n🏆 Достижение: " + ", ".join(achs) if achs else "")
     else:
@@ -397,7 +460,7 @@ def create_new_boss(user_id, peer_id):
         all_players = db.get_all_peer_ids()
         for p in all_players:
             if p["user_id"] == user_id:
-                continue  # Уже отправили
+                continue
             if db.should_notify(p["user_id"], "boss", cooldown_hours=2):
                 try:
                     send(p["last_peer_id"], 
@@ -437,7 +500,7 @@ def attack_boss(user_id, peer_id):
 
 def defeat_boss(boss):
     total_dmg = sum(p["damage"] for p in boss["participants"])
-    msgs = [f"👹 {boss['name']} повержен!\n\nНаграды:"]
+    msgs = [f" {boss['name']} повержен!\n\nНаграды:"]
     for p in boss["participants"]:
         share = p["damage"] / total_dmg if total_dmg > 0 else 1 / len(boss["participants"])
         reward = int(BOSS_LEVELS[boss["level"]]["reward"] * share)
@@ -450,12 +513,27 @@ def defeat_boss(boss):
         if pet_exp_bonus > 0:
             exp = int(exp * (1 + pet_exp_bonus))
         
+        # Клановый бонус
+        clan = db.get_clan(p["player_id"])
+        if clan:
+            clan_coins_bonus = db.get_clan_bonus(clan["id"], "coins")
+            if clan_coins_bonus > 0:
+                reward = int(reward * (1 + clan_coins_bonus))
+            clan_exp_bonus = db.get_clan_bonus(clan["id"], "exp")
+            if clan_exp_bonus > 0:
+                exp = int(exp * (1 + clan_exp_bonus))
+        
         pl = db.get_player(p["player_id"], get_name)
         pl["balance"] += reward
         add_exp(pl, exp)
         db.save_player(pl)
         db.update_daily_progress(p["player_id"], "boss", 1)
         db.add_season_points(p["player_id"], 20)
+        
+        # Опыт клану
+        if clan:
+            db.add_clan_exp(clan["id"], 15)
+        
         achs = db.check_achievements_on_action(p["player_id"], pl, "boss_kill")
         ach_msg = "  " + ", ".join(achs) if achs else ""
         msgs.append(f"{p['name']}: +{reward}💰, +{exp}⭐ (урон: {p['damage']}){ach_msg}")
@@ -522,7 +600,7 @@ def handle(user_id, peer_id, text):
     
     # Проверка бана
     if db.is_player_banned(user_id) and not is_admin(user_id):
-        send(peer_id, "🚫 Вы забанены!")
+        send(peer_id, " Вы забанены!")
         return
     
     player["last_peer_id"] = peer_id
@@ -559,6 +637,13 @@ def handle(user_id, peer_id, text):
         pet_coin_bonus = db.get_pet_bonus(user_id, "coins")
         if pet_coin_bonus > 0:
             earned = int(earned * (1 + pet_coin_bonus))
+        
+        # Клановый бонус к монетам
+        clan = db.get_clan(user_id)
+        if clan:
+            clan_coins_bonus = db.get_clan_bonus(clan["id"], "coins")
+            if clan_coins_bonus > 0:
+                earned = int(earned * (1 + clan_coins_bonus))
         
         player["balance"] += earned
         player["last_work"] = now
@@ -615,7 +700,14 @@ def handle(user_id, peer_id, text):
         if player.get("title"):
             title_info = f"\nТитул: {player['title']}"
         season_info = f"\nСезонные очки: {player.get('season_points', 0)}"
-        send(peer_id, f"Профиль\n\nИмя: {player['name']}\nУровень: {player['level']}\nОпыт: {player['exp']}\nБаланс: {player['balance']}\nСерия бонусов: {player.get('bonus_streak', 0)} дн.{title_info}{season_info}{cos}{pet_info}")
+        
+        # Информация о клане
+        clan = db.get_clan(user_id)
+        clan_info = ""
+        if clan:
+            clan_info = f"\nКлан: {clan['name']} (ур. {clan['level']})"
+        
+        send(peer_id, f"Профиль\n\nИмя: {player['name']}\nУровень: {player['level']}\nОпыт: {player['exp']}\nБаланс: {player['balance']}\nСерия бонусов: {player.get('bonus_streak', 0)} дн.{title_info}{season_info}{clan_info}{cos}{pet_info}")
         return
     if command in ["магазин", "shop"]:
         show_shop(peer_id)
@@ -768,13 +860,13 @@ def handle(user_id, peer_id, text):
             return
         
         lines = [f"🏆 Сезонный рейтинг (сезон {current}):\n"]
-        medals = ["", "🥈", "🥉"]
+        medals = ["", "🥈", ""]
         for i, p in enumerate(leaderboard, start=1):
             medal = medals[i-1] if i <= 3 else f"{i}."
             lines.append(f"{medal} {p['name']} — {p['season_points']} очков")
         
         lines.append(f"\nТвои очки: {player.get('season_points', 0)}")
-        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n🥈 500 монет + 'Вице-чемпион'\n 250 монет + 'Бронзовый'")
+        lines.append("\nНаграды топ-3:\n🥇 1000 монет + титул 'Чемпион'\n🥈 500 монет + 'Вице-чемпион'\n🥉 250 монет + 'Бронзовый'")
         send(peer_id, "\n".join(lines))
         return
     
@@ -784,7 +876,7 @@ def handle(user_id, peer_id, text):
             send(peer_id, "История сезонов пуста.")
             return
         
-        lines = [" История сезонов:\n"]
+        lines = ["📜 История сезонов:\n"]
         current_season_num = None
         for h in history:
             if h["season_number"] != current_season_num:
@@ -792,7 +884,7 @@ def handle(user_id, peer_id, text):
                 lines.append(f"\n🏆 Сезон {current_season_num}:")
             
             pl = db.get_player(h["user_id"], get_name)
-            medal = ["🥇", "🥈", ""][h["position"]-1] if h["position"] <= 3 else f"{h['position']}."
+            medal = ["🥇", "", "🥉"][h["position"]-1] if h["position"] <= 3 else f"{h['position']}."
             lines.append(f"  {medal} {pl['name']} — {h['season_points']} очков (+{h['reward_coins']}💰, '{h['title']}')")
         
         send(peer_id, "\n".join(lines))
@@ -803,10 +895,10 @@ def handle(user_id, peer_id, text):
                      "🪨 Камень-ножницы-бумага:\n"
                      "  кнб <камень|ножницы|бумага>\n"
                      "  Приз за победу: +10 монет\n\n"
-                     " Угадай число:\n"
+                     "🎲 Угадай число:\n"
                      "  угадай <число от 1 до 10>\n"
                      "  Приз: 50 монет\n\n"
-                     " Лотерея (100 монет):\n"
+                     "🎫 Лотерея (100 монет):\n"
                      "  лотерея\n"
                      "  Шанс 30%, приз 200-500 монет")
         return
@@ -953,12 +1045,222 @@ def handle(user_id, peer_id, text):
         send(peer_id, f"❌ Уведомление '{db.NOTIFICATION_TYPES[notif_type]}' выключено!")
         return
     
+    # === КЛАНЫ ===
+    if command in ["клан", "clan"]:
+        clan = db.get_clan(user_id)
+        if not clan:
+            send(peer_id, "🏰 Ты не состоишь в клане.\n\n"
+                         "Создать: клан создать <название> (5000 монет)\n"
+                         "Вступить: клан вступить <ID клана>\n"
+                         "Список кланов: кланы")
+            return
+        
+        members = db.get_clan_members(clan["id"])
+        member_count = len(members)
+        
+        send(peer_id, f"🏰 {clan['name']}\n\n"
+                     f"👑 Лидер: {clan['leader_name']}\n"
+                     f"⭐ Уровень: {clan['level']}\n"
+                     f"📊 Опыт: {clan['exp']}/{clan['level'] * 100}\n"
+                     f"💰 Казна: {clan['coins']} монет\n"
+                     f"👥 Участников: {member_count}\n"
+                     f"⚔️ Победы: {clan['wins']} | Поражения: {clan['losses']}\n\n"
+                     f"Твоя роль: {clan['role']}\n\n"
+                     f"Команды:\n"
+                     f"  клан info — информация\n"
+                     f"  клан участники — список участников\n"
+                     f"  клан пригласить <id> — пригласить игрока\n"
+                     f"  клан кикнуть <id> — кикнуть участника\n"
+                     f"  клан выйти — выйти из клана\n"
+                     f"  клан распустить — распустить клан (лидер)\n"
+                     f"  кланы — все кланы")
+        return
+    
+    if command.startswith("клан создать ") or command.startswith("clan create "):
+        clan = db.get_clan(user_id)
+        if clan:
+            send(peer_id, "Ты уже состоишь в клане!")
+            return
+        
+        if player["balance"] < 5000:
+            send(peer_id, "Недостаточно монет! Создание клана стоит 5000 монет.")
+            return
+        
+        name = text.split(" ", 2)[-1].strip()
+        if len(name) < 3 or len(name) > 30:
+            send(peer_id, "Название клана должно быть от 3 до 30 символов.")
+            return
+        
+        clan_id = db.create_clan(name, user_id)
+        if not clan_id:
+            send(peer_id, "Клан с таким названием уже существует!")
+            return
+        
+        player["balance"] -= 5000
+        db.save_player(player)
+        send(peer_id, f"🎉 Клан '{name}' создан!\n"
+                     f"ID клана: {clan_id}\n"
+                     f"Стоимость: 5000 монет")
+        return
+    
+    if command in ["кланы", "clans"]:
+        clans = db.get_all_clans()
+        if not clans:
+            send(peer_id, "Пока нет кланов. Будь первым!")
+            return
+        
+        lines = ["🏰 Все кланы:\n"]
+        for i, c in enumerate(clans[:10], start=1):
+            lines.append(f"{i}. {c['name']} (ур. {c['level']}) — {c['member_count']} уч., лидер: {c['leader_name']}")
+        
+        send(peer_id, "\n".join(lines))
+        return
+    
+    if command.startswith("клан вступить ") or command.startswith("clan join "):
+        clan = db.get_clan(user_id)
+        if clan:
+            send(peer_id, "Ты уже состоишь в клане!")
+            return
+        
+        try:
+            clan_id = int(command.split()[-1])
+        except (ValueError, IndexError):
+            send(peer_id, "Формат: клан вступить <ID клана>")
+            return
+        
+        target_clan = db.get_clan_by_id(clan_id)
+        if not target_clan:
+            send(peer_id, "Клан не найден!")
+            return
+        
+        if db.invite_to_clan(clan_id, user_id, user_id):
+            send(peer_id, f"✅ Ты вступил в клан '{target_clan['name']}'!")
+            
+            # Уведомить лидера
+            leader = db.get_player(target_clan["leader_id"], get_name)
+            if leader.get("last_peer_id"):
+                send(leader["last_peer_id"], 
+                     f"🎉 {player['name']} вступил в клан '{target_clan['name']}'!")
+        else:
+            send(peer_id, "Не удалось вступить в клан.")
+        return
+    
+    if command in ["клан выйти", "clan leave"]:
+        clan = db.get_clan(user_id)
+        if not clan:
+            send(peer_id, "Ты не состоишь в клане!")
+            return
+        
+        if clan["role"] == "leader":
+            send(peer_id, "Лидер не может выйти из клана. Распусти клан: клан распустить")
+            return
+        
+        if db.leave_clan(user_id):
+            send(peer_id, f"✅ Ты вышел из клана '{clan['name']}'.")
+        else:
+            send(peer_id, "Не удалось выйти из клана.")
+        return
+    
+    if command.startswith("клан пригласить ") or command.startswith("clan invite "):
+        clan = db.get_clan(user_id)
+        if not clan:
+            send(peer_id, "Ты не состоишь в клане!")
+            return
+        
+        if clan["role"] not in ["leader", "officer"]:
+            send(peer_id, "Только лидер и офицеры могут приглашать!")
+            return
+        
+        try:
+            target_id = int(command.split()[-1])
+        except (ValueError, IndexError):
+            send(peer_id, "Формат: клан пригласить <ID игрока>")
+            return
+        
+        if target_id == user_id:
+            send(peer_id, "Нельзя пригласить самого себя!")
+            return
+        
+        if db.invite_to_clan(clan["id"], target_id, user_id):
+            target = db.get_player(target_id, get_name)
+            send(peer_id, f"✅ {target['name']} приглашён в клан!")
+            
+            # Уведомить игрока
+            if target.get("last_peer_id"):
+                send(target["last_peer_id"],
+                     f" Тебя пригласили в клан '{clan['name']}'!\n"
+                     f"Напиши: клан вступить {clan['id']}")
+        else:
+            send(peer_id, "Игрок уже состоит в клане.")
+        return
+    
+    if command.startswith("клан кикнуть ") or command.startswith("clan kick "):
+        clan = db.get_clan(user_id)
+        if not clan:
+            send(peer_id, "Ты не состоишь в клане!")
+            return
+        
+        if clan["role"] not in ["leader", "officer"]:
+            send(peer_id, "Только лидер и офицеры могут кикать!")
+            return
+        
+        try:
+            target_id = int(command.split()[-1])
+        except (ValueError, IndexError):
+            send(peer_id, "Формат: клан кикнуть <ID игрока>")
+            return
+        
+        if db.kick_from_clan(clan["id"], target_id, user_id):
+            target = db.get_player(target_id, get_name)
+            send(peer_id, f"✅ {target['name']} кикнут из клана!")
+            
+            # Уведомить игрока
+            if target.get("last_peer_id"):
+                send(target["last_peer_id"],
+                     f"😔 Вас кикнули из клана '{clan['name']}'.")
+        else:
+            send(peer_id, "Не удалось кикнуть игрока.")
+        return
+    
+    if command in ["клан распустить", "clan disband"]:
+        clan = db.get_clan(user_id)
+        if not clan:
+            send(peer_id, "Ты не состоишь в клане!")
+            return
+        
+        if clan["role"] != "leader":
+            send(peer_id, "Только лидер может распустить клан!")
+            return
+        
+        if db.disband_clan(clan["id"], user_id):
+            send(peer_id, f"🗑️ Клан '{clan['name']}' распущен!")
+        else:
+            send(peer_id, "Не удалось распустить клан.")
+        return
+    
+    if command in ["клан участники", "clan members"]:
+        clan = db.get_clan(user_id)
+        if not clan:
+            send(peer_id, "Ты не состоишь в клане!")
+            return
+        
+        members = db.get_clan_members(clan["id"])
+        lines = [f"👥 Участники клана '{clan['name']}':\n"]
+        
+        role_emoji = {"leader": "👑", "officer": "⭐", "member": "•"}
+        for m in members:
+            emoji = role_emoji.get(m["role"], "•")
+            lines.append(f"{emoji} {m['name']} (ур. {m['level']}, {m['balance']}💰)")
+        
+        send(peer_id, "\n".join(lines))
+        return
+
     # === АДМИН-КОМАНДЫ ===
     if not is_admin(user_id):
         return
     
     if command in ["админ", "admin"]:
-        send(peer_id, "🔧 Админ-панель:\n\n"
+        send(peer_id, " Админ-панель:\n\n"
                      "📊 Статистика:\n"
                      "  статистика\n\n"
                      "👥 Игроки:\n"
@@ -968,7 +1270,7 @@ def handle(user_id, peer_id, text):
                      "  разбан <id>\n\n"
                      "🏆 Сезоны:\n"
                      "  сбросить сезон\n\n"
-                     "👹 Босс:\n"
+                     " Босс:\n"
                      "  сбросить босса\n\n"
                      "📢 Рассылка:\n"
                      "  рассылка <текст>")
@@ -980,7 +1282,7 @@ def handle(user_id, peer_id, text):
                      f"👥 Всего игроков: {stats['total_players']}\n"
                      f"💰 Всего монет: {stats['total_coins']}\n"
                      f"⭐ Средний уровень: {stats['avg_level']}\n"
-                     f"️ Всего дуэлей выиграно: {stats['total_duels']}\n"
+                     f"⚔️ Всего дуэлей выиграно: {stats['total_duels']}\n"
                      f"👹 Всего боссов убито: {stats['total_boss_kills']}")
         return
     
@@ -993,7 +1295,7 @@ def handle(user_id, peer_id, text):
         lines = [f"👥 Игроки ({len(all_players)}):\n"]
         for i, p in enumerate(all_players[:20], start=1):
             banned = " 🚫" if p["balance"] == -1 else ""
-            lines.append(f"{i}. {p['name']}{banned} — ур. {p['level']}, {p['balance']}💰, {p['season_points']}")
+            lines.append(f"{i}. {p['name']}{banned} — ур. {p['level']}, {p['balance']}💰, {p['season_points']}🏆")
         
         if len(all_players) > 20:
             lines.append(f"\n... и ещё {len(all_players) - 20}")
@@ -1041,7 +1343,7 @@ def handle(user_id, peer_id, text):
         
         if db.ban_player(target_id):
             target = db.get_player(target_id, get_name)
-            send(peer_id, f" {target['name']} забанен!")
+            send(peer_id, f"🚫 {target['name']} забанен!")
             if target.get("last_peer_id"):
                 send(target["last_peer_id"], "🚫 Вы были забанены администратором!")
         else:
