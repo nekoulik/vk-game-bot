@@ -1,11 +1,11 @@
 cd ~/vk-game-bot
 
 # Удали старый файл
-rm db/__init__.py
+rm -f db/__init__.py
 
-# Создай новый ПРАВИЛЬНЫЙ файл
-cat > db/__init__.py << 'ENDOFPYTHON'
-"""
+# Создай файл через Python (надёжно!)
+python3 << 'PYEOF'
+content = '''"""
 База данных — работа с SQLite.
 """
 import sqlite3
@@ -309,28 +309,24 @@ def add_coins_to_player(user_id, amount):
             "UPDATE players SET balance = balance + ? WHERE user_id = ?",
             (amount, user_id)
         )
-ENDOFPYTHON
+'''
 
-# Проверь что файл создан правильно
-head -5 db/__init__.py
+with open('db/__init__.py', 'w') as f:
+    f.write(content)
+print("✅ Файл db/__init__.py создан через Python!")
+PYEOF
 
-# Теперь создай БД
+# Проверь что файл правильный
+head -3 db/__init__.py
+
+# Создай БД
 python3 -c "import db; db.init_db(); print('✅ БД создана')"
 
-# Проверь таблицы
-python3 << 'EOF'
-import sqlite3
-conn = sqlite3.connect('game.db')
-tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-print("Таблицы:")
-for t in tables:
-    print(f"  - {t[0]}")
-EOF
-
-# Проверь функции PvP
-python3 -c "import db; print('create_duel_challenge:', hasattr(db, 'create_duel_challenge')); print('start_duel:', hasattr(db, 'start_duel'))"
+# Проверь функции
+python3 -c "import db; print('create_duel_challenge:', hasattr(db, 'create_duel_challenge'))"
 
 # Запусти бота
+pkill -f main.py
 python3 main.py > bot.log 2>&1 &
 
 sleep 2
