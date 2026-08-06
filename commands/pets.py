@@ -43,16 +43,32 @@ def cmd_my_pets(api, peer_id, user_id):
 
 def cmd_buy_pet(api, peer_id, player, command):
     """Купить питомца."""
+    # Парсим: "купить питомца 1" или "купить питомца Собака"
     parts = command.split()
+    
     if len(parts) < 3:
         send(api, peer_id, "Формат: купить питомца <id>")
         return
     
+    # Пробуем получить ID (последнее слово)
+    pet_arg = parts[-1]
+    
+    # Проверяем - число или название
     try:
-        pet_id = int(parts[2])
+        pet_id = int(pet_arg)
     except ValueError:
-        send(api, peer_id, "ID должен быть числом")
-        return
+        # Если не число - ищем по названию
+        pet_name = pet_arg.lower()
+        found = False
+        for pid, pet in PETS.items():
+            if pet["name"].lower() == pet_name:
+                pet_id = pid
+                found = True
+                break
+        
+        if not found:
+            send(api, peer_id, f"Питомец '{pet_name}' не найден!")
+            return
     
     if pet_id not in PETS:
         send(api, peer_id, "Такого питомца нет!")
