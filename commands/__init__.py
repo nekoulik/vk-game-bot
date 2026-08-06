@@ -36,7 +36,17 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["бонус", "bonus"]:
         return basic.cmd_bonus(api, peer_id, player)
     
-    # Магазин
+    # Питомцы (ПЕРЕД магазином, чтобы "купить питомца" не перехватывался shop)
+    if command in ["питомцы", "pets", "мои питомцы", "my pets"]:
+        return pets.cmd_pets_shop(api, peer_id, user_id)
+    
+    if command.startswith("купить питомца "):
+        return pets.cmd_buy_pet(api, peer_id, player, command)
+    
+    if command.startswith("активировать "):
+        return pets.cmd_activate_pet(api, peer_id, user_id, command)
+    
+    # Магазин (ПОСЛЕ питомцев)
     if command in ["магазин", "shop", "store"]:
         return shop.cmd_shop(api, peer_id)
     
@@ -48,16 +58,6 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     
     if command.startswith("экипировать ") or command.startswith("equip "):
         return shop.cmd_use(api, peer_id, player, command)
-    
-    # Питомцы
-    if command in ["питомцы", "pets", "мои питомцы", "my pets"]:
-        return pets.cmd_pets_shop(api, peer_id, user_id)
-    
-    if command.startswith("купить питомца "):
-        return pets.cmd_buy_pet(api, peer_id, player, command)
-    
-    if command.startswith("активировать "):
-        return pets.cmd_activate_pet(api, peer_id, user_id, command)
     
     # Босс
     if command in ["босс", "boss"]:
