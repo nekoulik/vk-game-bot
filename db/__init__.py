@@ -1,6 +1,6 @@
 cd ~/vk-game-bot
 
-# Создай полный db/__init__.py
+# Пересоздай db/__init__.py
 cat > db/__init__.py << 'ENDOFFILE'
 """
 База данных — работа с SQLite.
@@ -30,7 +30,7 @@ def get_connection():
 def init_db():
     """Инициализировать базу данных."""
     with get_connection() as conn:
-        # Таблица игроков
+        # Игроки
         conn.execute("""
             CREATE TABLE IF NOT EXISTS players (
                 user_id INTEGER PRIMARY KEY,
@@ -44,7 +44,7 @@ def init_db():
             )
         """)
         
-        # Таблица предметов
+        # Предметы
         conn.execute("""
             CREATE TABLE IF NOT EXISTS items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +56,7 @@ def init_db():
             )
         """)
         
-        # Таблица питомцев
+        # Питомцы
         conn.execute("""
             CREATE TABLE IF NOT EXISTS pets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +68,7 @@ def init_db():
             )
         """)
         
-        # Таблица квестов
+        # Квесты
         conn.execute("""
             CREATE TABLE IF NOT EXISTS quests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +81,7 @@ def init_db():
             )
         """)
         
-        # Таблица кланов
+        # Кланы
         conn.execute("""
             CREATE TABLE IF NOT EXISTS clans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,7 +91,6 @@ def init_db():
             )
         """)
         
-        # Таблица участников кланов
         conn.execute("""
             CREATE TABLE IF NOT EXISTS clan_members (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,8 +103,7 @@ def init_db():
             )
         """)
         
-        # ============ ТАБЛИЦЫ PvP ДУЭЛЕЙ ============
-        
+        # PvP дуэли
         conn.execute("""
             CREATE TABLE IF NOT EXISTS duel_challenges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,11 +128,9 @@ def init_db():
         
         conn.execute("CREATE INDEX IF NOT EXISTS idx_duel_challenges_target ON duel_challenges(target_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_duels_player1 ON duels(player1_id, status)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_duels_player2 ON duels(player2_id, status)")
 
 
 def get_player(user_id, name_fetcher):
-    """Получить или создать игрока."""
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
         if not row:
@@ -148,7 +144,6 @@ def get_player(user_id, name_fetcher):
 
 
 def save_player(player):
-    """Сохранить данные игрока."""
     with get_connection() as conn:
         conn.execute(
             "UPDATE players SET balance = ?, level = ?, season_points = ?, last_work = ?, last_bonus = ? WHERE user_id = ?",
@@ -158,7 +153,6 @@ def save_player(player):
 
 
 def get_top_players(limit=10):
-    """Получить топ игроков по балансу."""
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT * FROM players ORDER BY balance DESC LIMIT ?",
@@ -168,17 +162,12 @@ def get_top_players(limit=10):
 
 
 def get_player_items(user_id):
-    """Получить предметы игрока."""
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM items WHERE user_id = ?",
-            (user_id,)
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM items WHERE user_id = ?", (user_id,)).fetchall()
         return [dict(r) for r in rows]
 
 
 def buy_item(user_id, item_id, quantity=1):
-    """Купить предмет."""
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO items (user_id, item_id, quantity) VALUES (?, ?, ?)",
@@ -187,7 +176,6 @@ def buy_item(user_id, item_id, quantity=1):
 
 
 def equip_item(user_id, item_id):
-    """Экипировать предмет."""
     with get_connection() as conn:
         conn.execute("UPDATE items SET is_equipped = 0 WHERE user_id = ?", (user_id,))
         conn.execute(
@@ -197,17 +185,12 @@ def equip_item(user_id, item_id):
 
 
 def get_player_pets(user_id):
-    """Получить питомцев игрока."""
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM pets WHERE user_id = ?",
-            (user_id,)
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM pets WHERE user_id = ?", (user_id,)).fetchall()
         return [dict(r) for r in rows]
 
 
 def buy_pet(user_id, pet_id):
-    """Купить питомца."""
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO pets (user_id, pet_id, acquired_at) VALUES (?, ?, ?)",
@@ -216,7 +199,6 @@ def buy_pet(user_id, pet_id):
 
 
 def activate_pet(user_id, pet_id):
-    """Активировать питомца."""
     with get_connection() as conn:
         conn.execute("UPDATE pets SET is_active = 0 WHERE user_id = ?", (user_id,))
         conn.execute(
@@ -226,17 +208,12 @@ def activate_pet(user_id, pet_id):
 
 
 def get_player_quests(user_id):
-    """Получить квесты игрока."""
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM quests WHERE user_id = ?",
-            (user_id,)
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM quests WHERE user_id = ?", (user_id,)).fetchall()
         return [dict(r) for r in rows]
 
 
 def complete_quest(user_id, quest_id):
-    """Выполнить квест."""
     with get_connection() as conn:
         conn.execute(
             "UPDATE quests SET status = 'completed', completed_at = ? WHERE user_id = ? AND quest_id = ?",
@@ -245,7 +222,6 @@ def complete_quest(user_id, quest_id):
 
 
 def create_clan(name, leader_id):
-    """Создать клан."""
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO clans (name, leader_id, created_at) VALUES (?, ?, ?)",
@@ -255,7 +231,6 @@ def create_clan(name, leader_id):
 
 
 def get_clan(user_id):
-    """Получить клан игрока."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT c.* FROM clans c JOIN clan_members cm ON c.id = cm.clan_id WHERE cm.user_id = ?",
@@ -265,7 +240,6 @@ def get_clan(user_id):
 
 
 def join_clan(clan_id, user_id):
-    """Вступить в клан."""
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO clan_members (clan_id, user_id, joined_at) VALUES (?, ?, ?)",
@@ -274,15 +248,12 @@ def join_clan(clan_id, user_id):
 
 
 def leave_clan(user_id):
-    """Выйти из клана."""
     with get_connection() as conn:
         conn.execute("DELETE FROM clan_members WHERE user_id = ?", (user_id,))
 
 
-# ============ PvP ДУЭЛИ ============
-
+# PvP функции
 def create_duel_challenge(challenger_id, target_id):
-    """Создать вызов на дуэль."""
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO duel_challenges (challenger_id, target_id, created_at) VALUES (?, ?, ?)",
@@ -291,7 +262,6 @@ def create_duel_challenge(challenger_id, target_id):
 
 
 def get_duel_challenge_for_user(user_id):
-    """Получить активный вызов для пользователя."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM duel_challenges WHERE target_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -301,7 +271,6 @@ def get_duel_challenge_for_user(user_id):
 
 
 def get_duel_challenges_for_user(user_id):
-    """Получить все активные вызовы для пользователя."""
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT * FROM duel_challenges WHERE target_id = ? ORDER BY created_at DESC",
@@ -311,13 +280,11 @@ def get_duel_challenges_for_user(user_id):
 
 
 def clear_duel_challenge(challenge_id):
-    """Удалить вызов."""
     with get_connection() as conn:
         conn.execute("DELETE FROM duel_challenges WHERE id = ?", (challenge_id,))
 
 
 def start_duel(player1_id, player2_id, stake):
-    """Начать дуэль."""
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO duels (player1_id, player2_id, stake, status, created_at) VALUES (?, ?, ?, 'active', ?)",
@@ -326,7 +293,6 @@ def start_duel(player1_id, player2_id, stake):
 
 
 def get_active_duel(user_id):
-    """Получить активную дуэль для пользователя."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM duels WHERE (player1_id = ? OR player2_id = ?) AND status = 'active'",
@@ -336,7 +302,6 @@ def get_active_duel(user_id):
 
 
 def end_duel(duel_id, winner_id):
-    """Завершить дуэль."""
     with get_connection() as conn:
         conn.execute(
             "UPDATE duels SET status = 'finished', winner_id = ?, finished_at = ? WHERE id = ?",
@@ -345,7 +310,6 @@ def end_duel(duel_id, winner_id):
 
 
 def add_coins_to_player(user_id, amount):
-    """Добавить монеты игроку."""
     with get_connection() as conn:
         conn.execute(
             "UPDATE players SET balance = balance + ? WHERE user_id = ?",
@@ -353,8 +317,11 @@ def add_coins_to_player(user_id, amount):
         )
 ENDOFFILE
 
-# Создай таблицы
-python3 -c "import db; db.init_db(); print('✅ Таблицы созданы!')"
+# Проверь что файл создан правильно
+head -5 db/__init__.py
 
-# Проверь что функции есть
-python3 -c "import db; print('create_duel_challenge:', hasattr(db, 'create_duel_challenge')); print('start_duel:', hasattr(db, 'start_duel'))"
+# Создай таблицы
+python3 -c "import db; db.init_db(); print('✅ БД обновлена')"
+
+# Проверь функции
+python3 -c "import db; print('create_duel_challenge:', hasattr(db, 'create_duel_challenge'))"
