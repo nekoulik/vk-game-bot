@@ -1,7 +1,10 @@
 cd ~/vk-game-bot
 
-# Пересоздай db/__init__.py
-cat > db/__init__.py << 'ENDOFFILE'
+# Удали старый файл
+rm db/__init__.py
+
+# Создай новый ПРАВИЛЬНЫЙ файл
+cat > db/__init__.py << 'ENDOFPYTHON'
 """
 База данных — работа с SQLite.
 """
@@ -14,7 +17,6 @@ DATABASE = "game.db"
 
 @contextmanager
 def get_connection():
-    """Контекстный менеджер для подключения к БД."""
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     try:
@@ -28,9 +30,7 @@ def get_connection():
 
 
 def init_db():
-    """Инициализировать базу данных."""
     with get_connection() as conn:
-        # Игроки
         conn.execute("""
             CREATE TABLE IF NOT EXISTS players (
                 user_id INTEGER PRIMARY KEY,
@@ -44,7 +44,6 @@ def init_db():
             )
         """)
         
-        # Предметы
         conn.execute("""
             CREATE TABLE IF NOT EXISTS items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +55,6 @@ def init_db():
             )
         """)
         
-        # Питомцы
         conn.execute("""
             CREATE TABLE IF NOT EXISTS pets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +66,6 @@ def init_db():
             )
         """)
         
-        # Квесты
         conn.execute("""
             CREATE TABLE IF NOT EXISTS quests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +78,6 @@ def init_db():
             )
         """)
         
-        # Кланы
         conn.execute("""
             CREATE TABLE IF NOT EXISTS clans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +99,6 @@ def init_db():
             )
         """)
         
-        # PvP дуэли
         conn.execute("""
             CREATE TABLE IF NOT EXISTS duel_challenges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -252,7 +247,6 @@ def leave_clan(user_id):
         conn.execute("DELETE FROM clan_members WHERE user_id = ?", (user_id,))
 
 
-# PvP функции
 def create_duel_challenge(challenger_id, target_id):
     with get_connection() as conn:
         conn.execute(
@@ -315,13 +309,29 @@ def add_coins_to_player(user_id, amount):
             "UPDATE players SET balance = balance + ? WHERE user_id = ?",
             (amount, user_id)
         )
-ENDOFFILE
+ENDOFPYTHON
 
 # Проверь что файл создан правильно
 head -5 db/__init__.py
 
-# Создай таблицы
-python3 -c "import db; db.init_db(); print('✅ БД обновлена')"
+# Теперь создай БД
+python3 -c "import db; db.init_db(); print('✅ БД создана')"
 
-# Проверь функции
-python3 -c "import db; print('create_duel_challenge:', hasattr(db, 'create_duel_challenge'))"
+# Проверь таблицы
+python3 << 'EOF'
+import sqlite3
+conn = sqlite3.connect('game.db')
+tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+print("Таблицы:")
+for t in tables:
+    print(f"  - {t[0]}")
+EOF
+
+# Проверь функции PvP
+python3 -c "import db; print('create_duel_challenge:', hasattr(db, 'create_duel_challenge')); print('start_duel:', hasattr(db, 'start_duel'))"
+
+# Запусти бота
+python3 main.py > bot.log 2>&1 &
+
+sleep 2
+tail -20 bot.log
