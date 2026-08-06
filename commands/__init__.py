@@ -36,6 +36,22 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["бонус", "bonus"]:
         return basic.cmd_bonus(api, peer_id, player)
     
+    # PvP дуэли (ПОСЛЕ основных команд, ПЕРЕД магазином)
+    if command.startswith("вызов "):
+        return basic.cmd_challenge(api, peer_id, user_id, command)
+    
+    if command in ["принять", "accept"]:
+        return basic.cmd_accept_duel(api, peer_id, user_id, player)
+    
+    if command in ["отклонить", "decline"]:
+        return basic.cmd_decline_duel(api, peer_id, user_id)
+    
+    if command in ["статус дуэли", "duel status"]:
+        return basic.cmd_duel_status(api, peer_id, user_id)
+    
+    if command in ["дуэль", "duel"]:
+        return basic.cmd_duel(api, peer_id, user_id, player)
+    
     # Питомцы (ПЕРЕД магазином, чтобы "купить питомца" не перехватывался shop)
     if command in ["питомцы", "pets", "мои питомцы", "my pets"]:
         return pets.cmd_pets_shop(api, peer_id, user_id)
