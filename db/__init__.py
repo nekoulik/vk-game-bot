@@ -1,8 +1,5 @@
 cd ~/vk-game-bot
 
-# Удали старый файл
-rm db/__init__.py
-
 # Создай новый ПРАВИЛЬНЫЙ файл
 cat > db/__init__.py << 'ENDOFPYTHON'
 """
