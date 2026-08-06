@@ -31,7 +31,7 @@ def cmd_my_pets(api, peer_id, user_id):
         send(api, peer_id, "У тебя пока нет питомцев. Загляни в магазин: питомцы")
         return
     
-    lines = ["🐾 Твои питомцы:\n"]
+    lines = [" Твои питомцы:\n"]
     for p in owned:
         pet = PETS.get(p["pet_id"])
         if pet:
