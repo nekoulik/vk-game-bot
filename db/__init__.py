@@ -540,3 +540,59 @@ def end_season(season_id, winner_id):
 def reset_season():
     with get_connection() as conn:
         conn.execute("UPDATE players SET season_points = 0")
+
+# ============ ИНВЕНТАРЬ ============
+
+def add_to_inventory(user_id, item_id, quantity=1):
+    """Добавить предмет в инвентарь."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO inventory (user_id, item_id, quantity) VALUES (?, ?, ?)",
+            (user_id, item_id, quantity)
+        )
+
+
+def get_inventory(user_id):
+    """Получить инвентарь игрока."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM inventory WHERE user_id = ?",
+            (user_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def remove_from_inventory(user_id, item_id, quantity=1):
+    """Удалить предмет из инвентаря."""
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM inventory WHERE user_id = ? AND item_id = ? AND quantity <= ?",
+            (user_id, item_id, quantity)
+        )
+
+
+# ============ ЭКИПИРОВКА ============
+
+def get_equipment(user_id):
+    """Получить экипировку игрока."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM equipment WHERE user_id = ?",
+            (user_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def equip_item_new(user_id, item_id, slot):
+    """Экипировать предмет."""
+    with get_connection() as conn:
+        # Снимаем предмет из этого слота
+        conn.execute(
+            "DELETE FROM equipment WHERE user_id = ? AND slot = ?",
+            (user_id, slot)
+        )
+        # Надеваем новый
+        conn.execute(
+            "INSERT INTO equipment (user_id, item_id, slot) VALUES (?, ?, ?)",
+            (user_id, item_id, slot)
+        )
