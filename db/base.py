@@ -144,16 +144,12 @@ def init_db():
                 FOREIGN KEY (clan1_id) REFERENCES clans(id) ON DELETE CASCADE,
                 FOREIGN KEY (clan2_id) REFERENCES clans(id) ON DELETE CASCADE
             );
-            
-            -- PvP вызовы (новая таблица)
             CREATE TABLE IF NOT EXISTS duel_challenges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 challenger_id INTEGER NOT NULL,
                 target_id INTEGER NOT NULL,
                 created_at TEXT NOT NULL
             );
-            
-            -- Активные дуэли (новая таблица)
             CREATE TABLE IF NOT EXISTS active_duels (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player1_id INTEGER NOT NULL,
@@ -164,7 +160,6 @@ def init_db():
                 created_at TEXT NOT NULL,
                 finished_at TEXT
             );
-            
             CREATE INDEX IF NOT EXISTS idx_inventory_player ON inventory(player_id);
             CREATE INDEX IF NOT EXISTS idx_players_balance ON players(balance);
             CREATE INDEX IF NOT EXISTS idx_players_level ON players(level);

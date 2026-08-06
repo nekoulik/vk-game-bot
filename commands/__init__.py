@@ -35,8 +35,11 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     
     if command in ["бонус", "bonus"]:
         return basic.cmd_bonus(api, peer_id, player)
-    
-    # PvP дуэли (ПОСЛЕ основных команд, ПЕРЕД магазином)
+
+    if command.startswith("ставка 50") or command.startswith("bet "):
+        return basic.cmd_bet(api, peer_id, player, command)
+
+    # PvP дуэли
     if command.startswith("вызов "):
         return basic.cmd_challenge(api, peer_id, user_id, command)
     
@@ -46,12 +49,15 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["отклонить", "decline"]:
         return basic.cmd_decline_duel(api, peer_id, user_id)
     
+    if command in ["дуэль", "duel"]:
+        return basic.cmd_duel(api, peer_id, user_id, player, command)
+    
+    if command.startswith("дуэль ") or command.startswith("duel "):
+        return basic.cmd_duel(api, peer_id, user_id, player, command)
+
     if command in ["статус дуэли", "duel status"]:
         return basic.cmd_duel_status(api, peer_id, user_id)
-    
-    if command in ["дуэль", "duel"]:
-        return basic.cmd_duel(api, peer_id, user_id, player)
-    
+        
     # Питомцы (ПЕРЕД магазином, чтобы "купить питомца" не перехватывался shop)
     if command in ["питомцы", "pets", "мои питомцы", "my pets"]:
         return pets.cmd_pets_shop(api, peer_id, user_id)
@@ -82,7 +88,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["атака", "attack"]:
         return boss.cmd_attack_boss(api, peer_id, user_id)
     
-    if command in ["статус босса", "boss status"]:
+    if command in ["статус", "boss status"]:
         return boss.cmd_boss_status(api, peer_id, user_id)
     
     if command in ["сдаться", "give up"]:
@@ -153,6 +159,9 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
         return clans.cmd_members(api, peer_id, user_id)
     
     # Настройки
+    if command in ["напоминания", "notifications", "уведомления"]:
+        return notifications.cmd_notifications(api, peer_id, user_id)
+
     if command in ["настройки", "settings"]:
         return notifications.cmd_settings(api, peer_id, user_id)
     
