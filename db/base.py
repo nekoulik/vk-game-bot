@@ -144,6 +144,27 @@ def init_db():
                 FOREIGN KEY (clan1_id) REFERENCES clans(id) ON DELETE CASCADE,
                 FOREIGN KEY (clan2_id) REFERENCES clans(id) ON DELETE CASCADE
             );
+            
+            -- PvP вызовы (новая таблица)
+            CREATE TABLE IF NOT EXISTS duel_challenges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                challenger_id INTEGER NOT NULL,
+                target_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            
+            -- Активные дуэли (новая таблица)
+            CREATE TABLE IF NOT EXISTS active_duels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player1_id INTEGER NOT NULL,
+                player2_id INTEGER NOT NULL,
+                stake INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                winner_id INTEGER,
+                created_at TEXT NOT NULL,
+                finished_at TEXT
+            );
+            
             CREATE INDEX IF NOT EXISTS idx_inventory_player ON inventory(player_id);
             CREATE INDEX IF NOT EXISTS idx_players_balance ON players(balance);
             CREATE INDEX IF NOT EXISTS idx_players_level ON players(level);
@@ -151,6 +172,9 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_seasons_number ON seasons(season_number);
             CREATE INDEX IF NOT EXISTS idx_clan_members_user ON clan_members(user_id);
             CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id);
+            CREATE INDEX IF NOT EXISTS idx_duel_challenges_target ON duel_challenges(target_id);
+            CREATE INDEX IF NOT EXISTS idx_active_duels_player1 ON active_duels(player1_id, status);
+            CREATE INDEX IF NOT EXISTS idx_active_duels_player2 ON active_duels(player2_id, status);
         """)
         
         # Добавляем колонки для старых таблиц
