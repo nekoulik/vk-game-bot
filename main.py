@@ -50,7 +50,7 @@ def handle_message(event):
         
         # Если такое же сообщение было меньше 5 секунд назад — пропускаем
         if msg_hash in processed_messages:
-            if now - processed_messages[msg_hash] < 5:
+            if now - processed_messages[msg_hash] < 10:
                 print(f"️ Дубликат пропущен: {text[:30]}")
                 return
         
