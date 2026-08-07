@@ -6,11 +6,38 @@ import db
 from utils.helpers import send
 
 
+# Маппинг коротких названий → реальные ключи
+NOTIF_TYPE_MAP = {
+    "bonus": "daily_bonus",
+    "daily_bonus": "daily_bonus",
+    "ежедневный": "daily_bonus",
+    "quests": "quests",
+    "quest": "quests",
+    "квесты": "quests",
+    "квест": "quests",
+    "boss": "boss",
+    "босс": "boss",
+    "inactivity": "inactivity",
+    "inactive": "inactivity",
+    "неактивность": "inactivity",
+}
+
+
+def _resolve_type(notif_type):
+    """Преобразовать короткое название в реальный ключ."""
+    return NOTIF_TYPE_MAP.get(notif_type.lower())
+
+
 def cmd_notifications(api, peer_id, user_id):
-    """Показать настройки уведомлений."""
+    """Показать настройки уведомлений (алиас cmd_settings)."""
+    return cmd_settings(api, peer_id, user_id)
+
+
+def cmd_settings(api, peer_id, user_id):
+    """Показать текущие настройки уведомлений."""
     settings = db.get_notification_settings(user_id)
     if not settings:
-        send(api, peer_id, " Не удалось получить настройки.")
+        send(api, peer_id, "❌ Не удалось получить настройки.")
         return
     
     lines = ["🔔 Настройки уведомлений:\n"]
@@ -32,13 +59,13 @@ def cmd_enable(api, peer_id, user_id, command):
         send(api, peer_id, "Формат: включить <тип>")
         return
     
-    notif_type = parts[1].lower()
-    if notif_type not in db.NOTIFICATION_TYPES:
-        send(api, peer_id, f"Неизвестный тип. Доступные: {', '.join(db.NOTIFICATION_TYPES.keys())}")
+    real_type = _resolve_type(parts[1])
+    if not real_type:
+        send(api, peer_id, f"❌ Неизвестный тип. Доступные: bonus, quests, boss, inactivity")
         return
     
-    db.set_notification_setting(user_id, notif_type, True)
-    send(api, peer_id, f"✅ Уведомление '{db.NOTIFICATION_TYPES[notif_type]}' включено!")
+    db.set_notification_setting(user_id, real_type, True)
+    send(api, peer_id, f"✅ Уведомление '{db.NOTIFICATION_TYPES[real_type]}' включено!")
 
 
 def cmd_disable(api, peer_id, user_id, command):
@@ -48,13 +75,13 @@ def cmd_disable(api, peer_id, user_id, command):
         send(api, peer_id, "Формат: выключить <тип>")
         return
     
-    notif_type = parts[1].lower()
-    if notif_type not in db.NOTIFICATION_TYPES:
-        send(api, peer_id, f"Неизвестный тип. Доступные: {', '.join(db.NOTIFICATION_TYPES.keys())}")
+    real_type = _resolve_type(parts[1])
+    if not real_type:
+        send(api, peer_id, f"❌ Неизвестный тип. Доступные: bonus, quests, boss, inactivity")
         return
     
-    db.set_notification_setting(user_id, notif_type, False)
-    send(api, peer_id, f"❌ Уведомление '{db.NOTIFICATION_TYPES[notif_type]}' выключено!")
+    db.set_notification_setting(user_id, real_type, False)
+    send(api, peer_id, f"❌ Уведомление '{db.NOTIFICATION_TYPES[real_type]}' выключено!")
 
 
 def check_auto_notifications(api, user_id, peer_id, player):
@@ -74,7 +101,7 @@ def check_auto_notifications(api, user_id, peer_id, player):
             )
             db.update_last_notification(user_id, "daily_bonus")
     
-    # Проверка невыполненных квестов (если есть и прошло 6+ часов)
+    # Проверка невыполненных квестов
     player = db.check_and_reset_daily_quests(player)
     quests_status = db.get_daily_quests_status(player)
     if "⏳" in quests_status and player.get("daily_quest_claimed", 0) == 0:

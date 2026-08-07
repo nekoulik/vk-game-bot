@@ -158,16 +158,13 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["клан участники", "clan members"]:
         return clans.cmd_members(api, peer_id, user_id)
     
-    # Настройки
-    if command in ["напоминания", "notifications", "уведомления"]:
-        return notifications.cmd_notifications(api, peer_id, user_id)
-
-    if command in ["настройки", "settings"]:
+    # Настройки (объединили напоминания и настройки)
+    if command in ["настройки", "settings", "напоминания", "notifications", "уведомления"]:
         return notifications.cmd_settings(api, peer_id, user_id)
-    
+
     if command.startswith("включить "):
         return notifications.cmd_enable(api, peer_id, user_id, command)
-    
+
     if command.startswith("выключить "):
         return notifications.cmd_disable(api, peer_id, user_id, command)
     
