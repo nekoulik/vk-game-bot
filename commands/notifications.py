@@ -6,14 +6,14 @@ import db
 from utils.helpers import send
 
 
-def cmd_settings(api, peer_id, user_id):
-    """Показать текущие настройки уведомлений."""
+def cmd_notifications(api, peer_id, user_id):
+    """Показать настройки уведомлений."""
     settings = db.get_notification_settings(user_id)
     if not settings:
-        send(api, peer_id, "❌ Не удалось получить настройки.")
+        send(api, peer_id, " Не удалось получить настройки.")
         return
     
-    lines = [" Настройки уведомлений:\n"]
+    lines = ["🔔 Настройки уведомлений:\n"]
     for notif_type, name in db.NOTIFICATION_TYPES.items():
         status = "✅ ВКЛ" if settings.get(notif_type, False) else "❌ ВЫКЛ"
         lines.append(f"{status} {name}")
