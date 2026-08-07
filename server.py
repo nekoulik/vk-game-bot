@@ -3,16 +3,7 @@ WSGI-приложение для PythonAnywhere.
 Красивая заглушка для игрового бота Club Anicoke.
 """
 
-def application(environ, start_response):
-    """WSGI-обработчик."""
-    path = environ.get('PATH_INFO', '/')
-    
-    if path == '/' or path == '/index.html':
-        status = '200 OK'
-        headers = [('Content-type', 'text/html; charset=utf-8')]
-        start_response(status, headers)
-        
-        html = """<!DOCTYPE html>
+HTML_CONTENT = """<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -36,11 +27,6 @@ def application(environ, start_response):
             max-width: 600px;
             width: 100%;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            animation: fadeIn 0.5s ease;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
         }
         .logo { text-align: center; margin-bottom: 30px; }
         .logo-icon { font-size: 80px; margin-bottom: 10px; }
@@ -129,15 +115,15 @@ def application(environ, start_response):
                 <span>Баланс, работа, бонусы, магазин, инвентарь</span>
             </div>
             <div class="command-category">
-                <strong>️ PvP:</strong>
+                <strong>⚔️ PvP:</strong>
                 <span>Дуэли с игроками, вызовы, ставки</span>
             </div>
             <div class="command-category">
-                <strong> Босс:</strong>
+                <strong>👹 Босс:</strong>
                 <span>Сражения с боссом, награды</span>
             </div>
             <div class="command-category">
-                <strong>🎲 Игры:</strong>
+                <strong> Игры:</strong>
                 <span>Камень-ножницы-бумага, угадай число, лотерея</span>
             </div>
             <div class="command-category">
@@ -145,7 +131,7 @@ def application(environ, start_response):
                 <span>Покупка и активация питомцев</span>
             </div>
             <div class="command-category">
-                <strong> Прогресс:</strong>
+                <strong>🏆 Прогресс:</strong>
                 <span>Квесты, достижения, сезоны, кланы</span>
             </div>
         </div>
@@ -160,11 +146,19 @@ def application(environ, start_response):
     </div>
 </body>
 </html>"""
-        
-        return [html.encode('utf-8')]
+
+
+def application(environ, start_response):
+    """WSGI-обработчик."""
+    path = environ.get('PATH_INFO', '/')
     
+    if path == '/' or path == '/index.html':
+        status = '200 OK'
+        headers = [('Content-type', 'text/html; charset=utf-8')]
+        start_response(status, headers)
+        return [HTML_CONTENT.encode('utf-8')]
     else:
         status = '404 Not Found'
         headers = [('Content-type', 'text/plain; charset=utf-8')]
         start_response(status, headers)
-        return [b'Strаница не найдена']
+        return [b'Page not found']
