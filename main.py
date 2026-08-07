@@ -4,6 +4,7 @@
 """
 import os
 import time
+import hashlib
 import traceback
 from dotenv import load_dotenv
 from vk_api import VkApi
@@ -29,7 +30,7 @@ api = session.get_api()
 
 longpoll = VkBotLongPoll(session, GROUP_ID)
 
-# Защита от дубликатов: (user_id, text) -> время обработки
+# Защита от дубликатов: хэш (user_id + text + peer_id) -> время
 processed_messages = {}
 
 
@@ -43,19 +44,20 @@ def handle_message(event):
         if not text:
             return
         
-        # Ключ дубликата: пользователь + текст
-        msg_key = (user_id, text.lower())
+        # Создаём уникальный хэш сообщения
+        msg_hash = hashlib.md5(f"{user_id}:{text.lower()}:{peer_id}".encode()).hexdigest()
         now = time.time()
         
-        # Если такое же сообщение было меньше 3 секунд назад — пропускаем
-        if msg_key in processed_messages:
-            if now - processed_messages[msg_key] < 3:
+        # Если такое же сообщение было меньше 5 секунд назад — пропускаем
+        if msg_hash in processed_messages:
+            if now - processed_messages[msg_hash] < 5:
+                print(f"️ Дубликат пропущен: {text[:30]}")
                 return
         
-        processed_messages[msg_key] = now
+        processed_messages[msg_hash] = now
         
-        # Чистим старые записи (старше 60 секунд)
-        old_keys = [k for k, v in processed_messages.items() if now - v > 60]
+        # Чистим старые записи (старше 120 секунд)
+        old_keys = [k for k, v in processed_messages.items() if now - v > 120]
         for k in old_keys:
             del processed_messages[k]
         
@@ -98,7 +100,7 @@ def main():
                 longpoll = VkBotLongPoll(session, GROUP_ID)
                 print("✅ Longpoll пересоздан")
             except Exception as e2:
-                print(f"❌ Ошибка пересоздания longpoll: {e2}")
+                print(f" Ошибка пересоздания longpoll: {e2}")
 
 
 if __name__ == "__main__":
