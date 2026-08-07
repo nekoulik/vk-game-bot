@@ -29,14 +29,13 @@ api = session.get_api()
 
 longpoll = VkBotLongPoll(session, GROUP_ID)
 
-# Хранилище последних обработанных сообщений (для защиты от дубликатов)
-processed_messages = set()
+# Защита от дубликатов: (user_id, text) -> время обработки
+processed_messages = {}
 
 
 def handle_message(event):
     """Обработать входящее сообщение."""
     try:
-        message_id = event.obj["message"]["id"]
         user_id = event.obj["message"]["from_id"]
         peer_id = event.obj["message"]["peer_id"]
         text = event.obj["message"].get("text", "").strip()
@@ -44,15 +43,21 @@ def handle_message(event):
         if not text:
             return
         
-        # Проверка на дубликат
-        if message_id in processed_messages:
-            return
+        # Ключ дубликата: пользователь + текст
+        msg_key = (user_id, text.lower())
+        now = time.time()
         
-        processed_messages.add(message_id)
+        # Если такое же сообщение было меньше 3 секунд назад — пропускаем
+        if msg_key in processed_messages:
+            if now - processed_messages[msg_key] < 3:
+                return
         
-        # Ограничиваем размер множества (храним последние 1000 сообщений)
-        if len(processed_messages) > 1000:
-            processed_messages.clear()
+        processed_messages[msg_key] = now
+        
+        # Чистим старые записи (старше 60 секунд)
+        old_keys = [k for k, v in processed_messages.items() if now - v > 60]
+        for k in old_keys:
+            del processed_messages[k]
         
         player = db.get_player(user_id, lambda uid: get_name(api, uid))
         player["last_peer_id"] = peer_id
