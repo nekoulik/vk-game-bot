@@ -29,16 +29,30 @@ api = session.get_api()
 
 longpoll = VkBotLongPoll(session, GROUP_ID)
 
+# Хранилище последних обработанных сообщений (для защиты от дубликатов)
+processed_messages = set()
+
 
 def handle_message(event):
     """Обработать входящее сообщение."""
     try:
+        message_id = event.obj["message"]["id"]
         user_id = event.obj["message"]["from_id"]
         peer_id = event.obj["message"]["peer_id"]
         text = event.obj["message"].get("text", "").strip()
         
         if not text:
             return
+        
+        # Проверка на дубликат
+        if message_id in processed_messages:
+            return
+        
+        processed_messages.add(message_id)
+        
+        # Ограничиваем размер множества (храним последние 1000 сообщений)
+        if len(processed_messages) > 1000:
+            processed_messages.clear()
         
         player = db.get_player(user_id, lambda uid: get_name(api, uid))
         player["last_peer_id"] = peer_id
@@ -58,7 +72,7 @@ def handle_message(event):
 
 def main():
     """Главный цикл бота."""
-    global longpoll  # ← ВАЖНО! Объявляем как глобальную
+    global longpoll
     
     print("✅ Бот запущен!")
     
@@ -67,20 +81,19 @@ def main():
             for event in longpoll.listen():
                 if event.type == VkBotEventType.MESSAGE_NEW:
                     handle_message(event)
-                    time.sleep(0.3)  # Задержка между сообщениями
+                    time.sleep(0.3)
                     
         except Exception as e:
             print(f"❌ Ошибка longpoll: {e}")
             traceback.print_exc()
-            print(" Перезапуск через 10 секунд...")
+            print("⏳ Перезапуск через 10 секунд...")
             time.sleep(10)
             
-            # Пересоздаём longpoll
             try:
                 longpoll = VkBotLongPoll(session, GROUP_ID)
                 print("✅ Longpoll пересоздан")
             except Exception as e2:
-                print(f" Ошибка пересоздания longpoll: {e2}")
+                print(f"❌ Ошибка пересоздания longpoll: {e2}")
 
 
 if __name__ == "__main__":
