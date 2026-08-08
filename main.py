@@ -29,6 +29,7 @@ api = session.get_api()
 
 longpoll = VkBotLongPoll(session, VK_GROUP_ID)
 
+# Защита от дубликатов: хэш (user_id + text + peer_id) -> время
 processed_messages = {}
 
 # Кэш участников беседы: {peer_id: {user_id: name}}
@@ -53,7 +54,6 @@ def get_chat_members(peer_id):
 def check_chat_members_changes(peer_id):
     """Проверить изменения в составе участников беседы."""
     if peer_id not in chat_members_cache:
-        # Первый раз — сохраняем текущий состав
         chat_members_cache[peer_id] = get_chat_members(peer_id)
         print(f"📋 Кэш участников для {peer_id}: {len(chat_members_cache[peer_id])} человек")
         return
@@ -70,7 +70,7 @@ def check_chat_members_changes(peer_id):
     # Нашли ушедших участников
     for user_id, user_name in old_members.items():
         if user_id not in new_members:
-            print(f"➖ Ушёл участник: {user_name} ({user_id})")
+            print(f" Ушёл участник: {user_name} ({user_id})")
             handle_member_leave(peer_id, user_id, user_name)
     
     # Обновляем кэш
@@ -122,9 +122,11 @@ def handle_message(event):
         if not text:
             return
         
+        # Создаём уникальный хэш сообщения
         msg_hash = hashlib.md5(f"{user_id}:{text.lower()}:{peer_id}".encode()).hexdigest()
         now = time.time()
         
+        # Если такое же сообщение было меньше 10 секунд назад — пропускаем
         if msg_hash in processed_messages:
             if now - processed_messages[msg_hash] < 10:
                 print(f"⏱️ Дубликат пропущен: {text[:30]}")
@@ -132,6 +134,7 @@ def handle_message(event):
         
         processed_messages[msg_hash] = now
         
+        # Чистим старые записи (старше 120 секунд)
         old_keys = [k for k, v in processed_messages.items() if now - v > 120]
         for k in old_keys:
             del processed_messages[k]
@@ -146,7 +149,7 @@ def handle_message(event):
             mute_until = player.get("mute_until", 0)
             if mute_until and int(mute_until) > int(time.time()):
                 remaining = int((int(mute_until) - int(time.time())) / 60)
-                send(api, peer_id, f" Вы в муте! Осталось: {remaining} мин.")
+                send(api, peer_id, f"🔇 Вы в муте! Осталось: {remaining} мин.")
                 return
             else:
                 player["balance"] = 0
@@ -169,7 +172,7 @@ def handle_message(event):
             check_chat_members_changes(peer_id)
         
         command = text.lower()
-        print(f" Команда: {command}")
+        print(f"🔀 Команда: {command}")
         
         route(command, user_id, peer_id, text, player, api, ADMIN_IDS)
         print(f"✅ Команда обработана")
@@ -194,9 +197,10 @@ def main():
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"📱 ID группы: {VK_GROUP_ID}")
     print("="*50)
+    print("Нажми Ctrl+C для остановки\n")
     
-    while True:
-        try:
+    try:
+        while True:
             for event in longpoll.listen():
                 if event.type == VkBotEventType.MESSAGE_NEW:
                     handle_message(event)
@@ -204,17 +208,22 @@ def main():
                 else:
                     print(f"ℹ️ Другое событие: {event.type}")
                     
-        except Exception as e:
-            print(f"❌ Ошибка longpoll: {e}")
-            traceback.print_exc()
-            print("⏳ Перезапуск через 10 секунд...")
-            time.sleep(10)
-            
-            try:
-                longpoll = VkBotLongPoll(session, VK_GROUP_ID)
-                print("✅ Longpoll пересоздан")
-            except Exception as e2:
-                print(f"⚠️ Ошибка пересоздания longpoll: {e2}")
+    except KeyboardInterrupt:
+        print("\n" + "="*50)
+        print("🛑 Бот остановлен пользователем. До встречи!")
+        print("="*50)
+    except Exception as e:
+        print(f"❌ Ошибка longpoll: {e}")
+        traceback.print_exc()
+        print("⏳ Перезапуск через 10 секунд...")
+        time.sleep(10)
+        
+        try:
+            longpoll = VkBotLongPoll(session, VK_GROUP_ID)
+            print("✅ Longpoll пересоздан")
+            main()  # Рекурсивный перезапуск
+        except Exception as e2:
+            print(f"️ Ошибка пересоздания longpoll: {e2}")
 
 
 if __name__ == "__main__":
