@@ -1,8 +1,15 @@
-"""Вспомогательные функции."""
+"""
+Вспомогательные функции для Club Anicoke Bot.
+"""
 import re
+import random
+import vk_api
 from vk_api.utils import get_random_id
 
 
+# ==========================================
+# 1. РАБОТА С VK API
+# ==========================================
 def get_name(api, user_id):
     """Получить имя пользователя через VK API."""
     try:
@@ -16,12 +23,39 @@ def get_name(api, user_id):
     return f"ID{user_id}"
 
 
-def send(api, peer_id, text):
-    """Отправить сообщение."""
+def get_user_info(vk, user_id):
+    """Получение расширенной информации о пользователе."""
     try:
-        api.messages.send(peer_id=peer_id, message=text, random_id=get_random_id())
+        response = vk.users.get(user_ids=user_id, fields='first_name,last_name,photo_50')
+        if response:
+            return response[0]
+    except Exception:
+        pass
+    return {'first_name': 'Игрок', 'last_name': '', 'photo_50': ''}
+
+
+def get_full_name(user_info):
+    """Полное имя пользователя из словаря."""
+    first = user_info.get('first_name', '')
+    last = user_info.get('last_name', '')
+    return f"{first} {last}".strip()
+
+
+def send(api, peer_id, text, attachment=None):
+    """Отправить сообщение (с поддержкой вложений)."""
+    try:
+        params = {
+            'peer_id': peer_id,
+            'message': text,
+            'random_id': get_random_id()
+        }
+        if attachment:
+            params['attachment'] = attachment
+        api.messages.send(**params)
+        return True
     except Exception as e:
-        print(f"Ошибка отправки в {peer_id}: {e}")
+        print(f"⚠️ Ошибка отправки в {peer_id}: {e}")
+        return False
 
 
 def parse_user_id_from_mention(text):
@@ -30,10 +64,23 @@ def parse_user_id_from_mention(text):
     return int(m.group(1)) if m else None
 
 
+def format_number(num):
+    """Форматирование числа с разделителями (1 000 000)."""
+    if num is None:
+        return "0"
+    return f"{int(num):,}".replace(',', ' ')
+
+
+# ==========================================
+# 2. ИГРОВАЯ МЕХАНИКА (RPG)
+# ==========================================
 def add_exp(player, amount=1, clan=None):
-    """Добавить опыт игроку с учётом кланового бонуса."""
-    from db.clans import get_clan_bonus, get_clan
-    from db.clans import add_clan_exp
+    """
+    Добавить опыт игроку с учётом кланового бонуса.
+    ⚠️ ВАЖНО: обновляет словарь player, но НЕ сохраняет в БД!
+    После вызова сделай UPDATE в базе данных.
+    """
+    from db.clans import get_clan_bonus, get_clan, add_clan_exp
     
     if clan is None:
         clan = get_clan(player["user_id"])
@@ -45,24 +92,26 @@ def add_exp(player, amount=1, clan=None):
     
     player["exp"] += amount
     leveled_up = False
+    
     while player["exp"] >= player["level"] * 10:
         player["exp"] -= player["level"] * 10
         player["level"] += 1
         leveled_up = True
         if clan:
             add_clan_exp(clan["id"], 10)
+    
     return leveled_up
 
 
 def get_player_damage(player):
     """Рассчитать урон игрока с учётом экипировки, питомца и клана."""
-    import random
     from db.items import get_equipment
     from db.pets import get_pet_bonus
     from db.clans import get_clan, get_clan_bonus
     from config.items import ITEMS
     
     base = random.randint(12, 25)
+    
     eq = get_equipment(player["user_id"])
     if eq.get("weapon") and eq["weapon"] in ITEMS:
         base += ITEMS[eq["weapon"]]["effect"].get("damage", 0)
@@ -89,31 +138,5 @@ def get_player_defense(player):
     eq = get_equipment(player["user_id"])
     if eq.get("armor") and eq["armor"] in ITEMS:
         defense += ITEMS[eq["armor"]]["effect"].get("defense", 0)
+    
     return defense
-
-import vk_api
-
-
-def format_number(num):
-    """Форматирование числа с разделителями"""
-    if num is None:
-        return "0"
-    return f"{num:,}".replace(',', ' ')
-
-
-def get_user_info(vk, user_id):
-    """Получение информации о пользователе"""
-    try:
-        response = vk.users.get(user_ids=user_id, fields='first_name,last_name,photo_50')
-        if response:
-            return response[0]
-    except Exception:
-        pass
-    return {'first_name': 'Игрок', 'last_name': '', 'photo_50': ''}
-
-
-def get_full_name(user_info):
-    """Полное имя пользователя"""
-    first = user_info.get('first_name', '')
-    last = user_info.get('last_name', '')
-    return f"{first} {last}".strip()

@@ -17,7 +17,70 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
         api: VK API
         ADMIN_IDS: Список ID админов
     """
-    # Основные команды
+    # === АДМИН-КОМАНДЫ (ПРОВЕРЯЕМ ПЕРВЫМИ!) ===
+    if user_id in ADMIN_IDS:
+        # Админ-панель
+        if command in ["админ", "admin"]:
+            return admin.cmd_admin_panel(api, peer_id)
+        
+        if command in ["статистика", "stats"]:
+            return admin.cmd_stats(api, peer_id)
+        
+        if command in ["игроки", "players"]:
+            return admin.cmd_players(api, peer_id)
+        
+        if command.startswith("выдать "):
+            return admin.cmd_give(api, peer_id, command)
+        
+        if command.startswith("бан "):
+            return admin.cmd_ban(api, peer_id, command)
+        
+        if command.startswith("разбан "):
+            return admin.cmd_unban(api, peer_id, command)
+        
+        if command in ["сбросить сезон", "reset season"]:
+            return admin.cmd_reset_season(api, peer_id)
+        
+        if command in ["сбросить босса", "reset boss"]:
+            return admin.cmd_reset_boss(api, peer_id)
+        
+        if command.startswith("рассылка "):
+            return admin.cmd_broadcast(api, peer_id, text)
+        
+        if command.startswith("мут "):
+            return admin.cmd_mute(api, peer_id, command)
+        
+        if command.startswith("проверить "):
+            return admin.cmd_check_player(api, peer_id, command)
+        
+        if command.startswith("очистить "):
+            return admin.cmd_clear_player(api, peer_id, command)
+        
+        # === Управление беседой ===
+        if command in ["ограничить", "restrict"]:
+            return admin.cmd_restrict_chat(api, peer_id, command)
+        
+        if command in ["открыть", "open"]:
+            return admin.cmd_open_chat(api, peer_id, command)
+        
+        if command.startswith("приветствие "):
+            return admin.cmd_set_welcome(api, peer_id, text)
+        
+        if command.startswith("прощание "):
+            return admin.cmd_set_goodbye(api, peer_id, text)
+        
+        if command in ["настройки беседы", "chat settings"]:
+            return admin.cmd_chat_settings(api, peer_id)
+        
+        # Уведомления беседы (только для админов!)
+        # Формат: уведомления <вход/выход> <вкл/выкл>
+        if command.startswith("уведомления "):
+            parts = command.split()
+            # Если есть аргументы (вход/выход) — это управление беседой
+            if len(parts) >= 3 and parts[1] in ["вход", "выход"] and parts[2] in ["вкл", "выкл"]:
+                return admin.cmd_toggle_notify(api, peer_id, command)
+    
+    # === ОСНОВНЫЕ КОМАНДЫ ===
     if command in ["старт", "start", "помощь", "help"]:
         return basic.cmd_help(api, peer_id)
     
@@ -39,7 +102,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command.startswith("ставка 50") or command.startswith("bet "):
         return basic.cmd_bet(api, peer_id, player, command)
 
-    # PvP дуэли
+    # === PvP дуэли ===
     if command.startswith("вызов "):
         return basic.cmd_challenge(api, peer_id, user_id, command)
     
@@ -58,7 +121,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["статус дуэли", "duel status"]:
         return basic.cmd_duel_status(api, peer_id, user_id)
         
-    # Питомцы (ПЕРЕД магазином, чтобы "купить питомца" не перехватывался shop)
+    # === Питомцы (ПЕРЕД магазином) ===
     if command in ["питомцы", "pets", "мои питомцы", "my pets"]:
         return pets.cmd_pets_shop(api, peer_id, user_id)
     
@@ -68,7 +131,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command.startswith("активировать "):
         return pets.cmd_activate_pet(api, peer_id, user_id, command)
     
-    # Магазин (ПОСЛЕ питомцев)
+    # === Магазин (ПОСЛЕ питомцев) ===
     if command in ["магазин", "shop", "store"]:
         return shop.cmd_shop(api, peer_id)
     
@@ -81,7 +144,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command.startswith("экипировать ") or command.startswith("equip "):
         return shop.cmd_use(api, peer_id, player, command)
     
-    # Босс
+    # === Босс ===
     if command in ["босс", "boss"]:
         return boss.cmd_start_boss(api, peer_id, user_id)
     
@@ -94,7 +157,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["сдаться", "give up"]:
         return boss.cmd_leave_boss(api, peer_id, user_id)
     
-    # Квесты
+    # === Квесты ===
     if command in ["квесты", "quests"]:
         return quests.cmd_quests(api, peer_id, player)
     
@@ -104,14 +167,14 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["достижения", "achievements"]:
         return quests.cmd_achievements(api, peer_id, user_id)
     
-    # Сезоны
+    # === Сезоны ===
     if command in ["сезон", "season"]:
         return seasons.cmd_season(api, peer_id, player)
     
     if command in ["история сезонов", "season history"]:
         return seasons.cmd_history(api, peer_id)
     
-    # Мини-игры
+    # === Мини-игры ===
     if command in ["игры", "games"]:
         return games.cmd_games_menu(api, peer_id)
     
@@ -130,7 +193,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["лотерея", "lottery"]:
         return games.cmd_lottery(api, peer_id, player)
     
-    # Кланы
+    # === Кланы ===
     if command in ["клан", "clan"]:
         return clans.cmd_clan_info(api, peer_id, user_id)
     
@@ -158,8 +221,8 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["клан участники", "clan members"]:
         return clans.cmd_members(api, peer_id, user_id)
     
-    # Настройки (объединили напоминания и настройки)
-    if command in ["настройки", "settings", "напоминания", "notifications", "уведомления"]:
+    # === Настройки игрока (уведомления игрока) ===
+    if command in ["настройки", "settings", "напоминания"]:
         return notifications.cmd_settings(api, peer_id, user_id)
 
     if command.startswith("включить "):
@@ -168,31 +231,6 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command.startswith("выключить "):
         return notifications.cmd_disable(api, peer_id, user_id, command)
     
-    # Админ-команды
-    if user_id in ADMIN_IDS:
-        if command in ["админ", "admin"]:
-            return admin.cmd_admin_panel(api, peer_id)
-        
-        if command in ["статистика", "stats"]:
-            return admin.cmd_stats(api, peer_id)
-        
-        if command in ["игроки", "players"]:
-            return admin.cmd_players(api, peer_id)
-        
-        if command.startswith("выдать "):
-            return admin.cmd_give(api, peer_id, command)
-        
-        if command.startswith("бан "):
-            return admin.cmd_ban(api, peer_id, command)
-        
-        if command.startswith("разбан "):
-            return admin.cmd_unban(api, peer_id, command)
-        
-        if command in ["сбросить сезон", "reset season"]:
-            return admin.cmd_reset_season(api, peer_id)
-        
-        if command in ["сбросить босса", "reset boss"]:
-            return admin.cmd_reset_boss(api, peer_id)
-        
-        if command.startswith("рассылка "):
-            return admin.cmd_broadcast(api, peer_id, text)
+    # Команда "уведомления" без аргументов — для игрока
+    if command == "уведомления":
+        return notifications.cmd_settings(api, peer_id, user_id)

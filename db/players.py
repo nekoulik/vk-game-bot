@@ -85,14 +85,18 @@ def save_player(player):
             """UPDATE players SET name=?, balance=?, level=?, exp=?, last_work=?, last_bonus=?,
                bonus_streak=?, last_peer_id=?, updated_at=?, daily_duels=?, daily_boss_kills=?,
                daily_coins_earned=?, last_quest_date=?, total_duels_won=?, total_boss_kills=?, 
-               daily_quest_claimed=?, season_points=?, title=?, current_season=?, last_lottery=?
+               daily_quest_claimed=?, season_points=?, title=?, current_season=?, last_lottery=?,
+               mute_until=?, last_activity=?
                WHERE user_id=?""",
             (player["name"], player["balance"], player["level"], player["exp"], player["last_work"],
              player["last_bonus"], player["bonus_streak"], player.get("last_peer_id"), player["updated_at"],
              player.get("daily_duels", 0), player.get("daily_boss_kills", 0), player.get("daily_coins_earned", 0),
              player.get("last_quest_date", ""), player.get("total_duels_won", 0), player.get("total_boss_kills", 0),
              player.get("daily_quest_claimed", 0), player.get("season_points", 0), player.get("title", ""),
-             player.get("current_season", 1), player.get("last_lottery", ""), player["user_id"]))
+             player.get("current_season", 1), player.get("last_lottery", ""),
+             int(player.get("mute_until", 0)),
+             player.get("last_activity", ""),
+             player["user_id"]))
         conn.commit()
     finally:
         conn.close()
@@ -116,7 +120,7 @@ def get_all_players():
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT user_id, name, balance, level, exp, season_points, title, last_bonus, bonus_streak "
+            "SELECT user_id, name, balance, level, exp, season_points, title, last_bonus, bonus_streak, mute_until "
             "FROM players ORDER BY level DESC, balance DESC"
         ).fetchall()
         return [dict(r) for r in rows]
@@ -143,7 +147,7 @@ def ban_player(user_id):
     conn = get_conn()
     try:
         conn.execute(
-            "UPDATE players SET balance = -1 WHERE user_id = ?",
+            "UPDATE players SET balance = -1, mute_until = 0 WHERE user_id = ?",
             (user_id,)
         )
         conn.commit()
@@ -157,7 +161,7 @@ def unban_player(user_id):
     conn = get_conn()
     try:
         conn.execute(
-            "UPDATE players SET balance = 100 WHERE user_id = ? AND balance = -1",
+            "UPDATE players SET balance = 100, mute_until = 0 WHERE user_id = ? AND balance = -1",
             (user_id,)
         )
         conn.commit()

@@ -100,5 +100,16 @@ from db.notifications import (
     get_inactive_players,
 )
 
+from db.chat_settings import (
+    init_chat_settings_table,
+    get_chat_settings,
+    set_chat_restricted,
+    set_welcome_message,
+    set_goodbye_message,
+    set_notify_join,
+    set_notify_leave,
+    kick_user,
+)
+
 init_db()
 migrate_from_json()
