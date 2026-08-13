@@ -129,10 +129,3 @@ GitHub: @nekoulik
 Сайт: https://nekoulik.pythonanywhere.com
 
 Made with ❤️ by Club Anicoke Team
-
-### Что делать дальше:
-1. Выдели **весь** текст выше (от `# 🎮 VK Game Bot` до `**Made with ❤️ by Club Anicoke Team**`).
-2. Вставь его в файл `README.md` на GitHub.
-3. Нажми **Commit changes**.
-
-Теперь там будет **и структура, и команды, и всё остальное** в одном красивом файле! 🚀
