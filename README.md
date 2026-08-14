@@ -117,6 +117,7 @@ vk-game-bot/
 ```
 ---
 ⌨️ Основные команды
+
 👤 Игрок
 ---
 - помощь — список команд
@@ -146,13 +147,16 @@ vk-game-bot/
 🔧 Настройка
 ---
 config/settings.py
+---
 # Настройки работы
-WORK_REWARD_MIN = 50
-WORK_REWARD_MAX = 150
-DAILY_BONUS = 100
-COOLDOWN_WORK = 3600  # 1 час
+---
+- WORK_REWARD_MIN = 50
+- WORK_REWARD_MAX = 150
+- DAILY_BONUS = 100
+- COOLDOWN_WORK = 3600  # 1 час
 ---
 config/shop.py
+
 # Оружие
 ---
 WEAPONS = {
@@ -169,27 +173,29 @@ PETS = {
 ---
 📊 База данных
 ---
-Бот использует SQLite. Основные таблицы:
-players — игроки
-boss — текущий босс
-duels — дуэли
-items — предметы
-clans — кланы
-chat_settings — настройки беседы
+- Бот использует SQLite. Основные таблицы:
+- players — игроки
+- boss — текущий босс
+- duels — дуэли
+- items — предметы
+- clans — кланы
+- chat_settings — настройки беседы
 ---
 🛡️ Безопасность
 ---
-Все SQL-запросы с параметрами (защита от SQL-инъекций)
-Проверка прав администратора
-Валидация входных данных
-Обработка исключений
+- Все SQL-запросы с параметрами (защита от SQL-инъекций)
+- Проверка прав администратора
+- Валидация входных данных
+- Обработка исключений
 ---
 📜 Лицензия
-MIT License
 
+MIT License
+---
 👥 Авторы
-ВКонтакте: Club Anicoke
-GitHub: @nekoulik
-Сайт: https://nekoulik.pythonanywhere.com
+
+- ВКонтакте: Club Anicoke
+- GitHub: @nekoulik
+- Сайт: https://nekoulik.pythonanywhere.com
 
 Made with ❤️ by Club Anicoke Team
