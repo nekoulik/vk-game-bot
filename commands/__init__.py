@@ -1,87 +1,26 @@
 """
-Роутер команд — распределяет сообщения по обработчикам.
+Роутер команд бота.
+Направляет сообщения к соответствующим обработчикам.
 """
-from commands import basic, shop, pets, boss, quests, seasons, games, notifications, clans, admin
+from utils.helpers import send
+from utils.keyboard import get_main_keyboard, get_admin_keyboard
+from commands import basic, admin, boss, quests, games, pvp, clans
 
 
 def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     """
-    Распределить команду по обработчикам.
-    
-    Args:
-        command: Текст команды (нижний регистр)
-        user_id: ID пользователя
-        peer_id: ID чата
-        text: Оригинальный текст
-        player: Данные игрока
-        api: VK API
-        ADMIN_IDS: Список ID админов
+    Распределить команды по обработчикам.
     """
-    # === АДМИН-КОМАНДЫ (ПРОВЕРЯЕМ ПЕРВЫМИ!) ===
-    if user_id in ADMIN_IDS:
-        # Админ-панель
-        if command in ["админ", "admin"]:
-            return admin.cmd_admin_panel(api, peer_id)
-        
-        if command in ["статистика", "stats"]:
-            return admin.cmd_stats(api, peer_id)
-        
-        if command in ["игроки", "players"]:
-            return admin.cmd_players(api, peer_id)
-        
-        if command.startswith("выдать "):
-            return admin.cmd_give(api, peer_id, command)
-        
-        if command.startswith("бан "):
-            return admin.cmd_ban(api, peer_id, command)
-        
-        if command.startswith("разбан "):
-            return admin.cmd_unban(api, peer_id, command)
-        
-        if command in ["сбросить сезон", "reset season"]:
-            return admin.cmd_reset_season(api, peer_id)
-        
-        if command in ["сбросить босса", "reset boss"]:
-            return admin.cmd_reset_boss(api, peer_id)
-        
-        if command.startswith("рассылка "):
-            return admin.cmd_broadcast(api, peer_id, text)
-        
-        if command.startswith("мут "):
-            return admin.cmd_mute(api, peer_id, command)
-        
-        if command.startswith("проверить "):
-            return admin.cmd_check_player(api, peer_id, command)
-        
-        if command.startswith("очистить "):
-            return admin.cmd_clear_player(api, peer_id, command)
-        
-        # === Управление беседой ===
-        if command in ["ограничить", "restrict"]:
-            return admin.cmd_restrict_chat(api, peer_id, command)
-        
-        if command in ["открыть", "open"]:
-            return admin.cmd_open_chat(api, peer_id, command)
-        
-        if command.startswith("приветствие "):
-            return admin.cmd_set_welcome(api, peer_id, text)
-        
-        if command.startswith("прощание "):
-            return admin.cmd_set_goodbye(api, peer_id, text)
-        
-        if command in ["настройки беседы", "chat settings"]:
-            return admin.cmd_chat_settings(api, peer_id)
-        
-        # Уведомления беседы (только для админов!)
-        # Формат: уведомления <вход/выход> <вкл/выкл>
-        if command.startswith("уведомления "):
-            parts = command.split()
-            # Если есть аргументы (вход/выход) — это управление беседой
-            if len(parts) >= 3 and parts[1] in ["вход", "выход"] and parts[2] in ["вкл", "выкл"]:
-                return admin.cmd_toggle_notify(api, peer_id, command)
+    is_admin = user_id in ADMIN_IDS
+    
+    # === КНОПКА "НАЗАД" — всегда возвращает в главное меню ===
+    if command in ["назад", "back"]:
+        keyboard = get_main_keyboard()
+        send(api, peer_id, "📋 Главное меню:", keyboard=keyboard)
+        return
     
     # === ОСНОВНЫЕ КОМАНДЫ ===
-    if command in ["старт", "start", "помощь", "help"]:
+    if command in ["помощь", "help", "хелп", "старт", "start"]:
         return basic.cmd_help(api, peer_id)
     
     if command in ["баланс", "balance"]:
@@ -90,147 +29,195 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["профиль", "profile"]:
         return basic.cmd_profile(api, peer_id, player)
     
-    if command in ["топ", "top"]:
+    if command in ["топ", "top", "топ игроков", "рейтинг"]:
         return basic.cmd_top(api, peer_id)
     
     if command in ["работа", "work"]:
         return basic.cmd_work(api, peer_id, player)
     
-    if command in ["бонус", "bonus"]:
+    if command in ["бонус", "bonus", "ежедневный бонус"]:
         return basic.cmd_bonus(api, peer_id, player)
-
-    if command.startswith("ставка 50") or command.startswith("bet "):
-        return basic.cmd_bet(api, peer_id, player, command)
-
-    # === PvP дуэли ===
-    if command.startswith("вызов "):
-        return basic.cmd_challenge(api, peer_id, user_id, command)
     
-    if command in ["принять", "accept"]:
-        return basic.cmd_accept_duel(api, peer_id, user_id, player)
-    
-    if command in ["отклонить", "decline"]:
-        return basic.cmd_decline_duel(api, peer_id, user_id)
+    if command.startswith("ставка ") or command == "ставка":
+        return basic.cmd_bet(api, peer_id, player, text)
     
     if command in ["дуэль", "duel"]:
-        return basic.cmd_duel(api, peer_id, user_id, player, command)
+        return basic.cmd_duel(api, peer_id, user_id, player, text)
     
-    if command.startswith("дуэль ") or command.startswith("duel "):
-        return basic.cmd_duel(api, peer_id, user_id, player, command)
+    # === МАГАЗИН ===
+    if command in ["магазин", "shop"]:
+        return basic.cmd_shop(api, peer_id)
+    
+    if command.startswith("купить ") or command == "купить":
+        return basic.cmd_buy(api, peer_id, player, text)
+    
+    if command in ["инвентарь", "inventory"]:
+        return basic.cmd_inventory(api, peer_id, player)
+    
+    if command.startswith("использовать ") or command == "использовать":
+        return basic.cmd_use(api, peer_id, player, text)
+    
+    if command.startswith("использовать все ") or command == "использовать все":
+        return basic.cmd_use_all(api, peer_id, player, text)
+    
+    if command.startswith("экипировать ") or command == "экипировать":
+        return basic.cmd_equip(api, peer_id, player, text)
 
-    if command in ["статус дуэли", "duel status"]:
-        return basic.cmd_duel_status(api, peer_id, user_id)
-        
-    # === Питомцы (ПЕРЕД магазином) ===
-    if command in ["питомцы", "pets", "мои питомцы", "my pets"]:
-        return pets.cmd_pets_shop(api, peer_id, user_id)
-    
-    if command.startswith("купить питомца "):
-        return pets.cmd_buy_pet(api, peer_id, player, command)
-    
-    if command.startswith("активировать "):
-        return pets.cmd_activate_pet(api, peer_id, user_id, command)
-    
-    # === Магазин (ПОСЛЕ питомцев) ===
-    if command in ["магазин", "shop", "store"]:
-        return shop.cmd_shop(api, peer_id)
-    
-    if command in ["инвентарь", "inventory", "инв"]:
-        return shop.cmd_inventory(api, peer_id, player)
-    
-    if command.startswith("купить ") or command.startswith("buy "):
-        return shop.cmd_buy(api, peer_id, player, command)
-    
-    if command.startswith("экипировать ") or command.startswith("equip "):
-        return shop.cmd_use(api, peer_id, player, command)
-    
-    # === Босс ===
-    if command in ["босс", "boss"]:
-        return boss.cmd_start_boss(api, peer_id, user_id)
-    
-    if command in ["атака", "attack"]:
-        return boss.cmd_attack_boss(api, peer_id, user_id)
-    
-    if command in ["статус", "boss status"]:
-        return boss.cmd_boss_status(api, peer_id, user_id)
-    
-    if command in ["сдаться", "give up"]:
-        return boss.cmd_leave_boss(api, peer_id, user_id)
-    
-    # === Квесты ===
+    # === КВЕСТЫ ===
     if command in ["квесты", "quests"]:
         return quests.cmd_quests(api, peer_id, player)
     
-    if command in ["выполнить квесты", "claim quests"]:
+    if command in ["выполнить квесты", "claim quests", "забрать квесты"]:
         return quests.cmd_claim_quests(api, peer_id, player)
     
-    if command in ["достижения", "achievements"]:
-        return quests.cmd_achievements(api, peer_id, user_id)
+    # === БОСС ===
+    if command in ["босс", "boss"]:
+        return boss.cmd_boss(api, peer_id, user_id)
     
-    # === Сезоны ===
-    if command in ["сезон", "season"]:
-        return seasons.cmd_season(api, peer_id, player)
+    if command in ["создать босса", "spawn boss", "спавн босса"]:
+        if is_admin:
+            return boss.cmd_spawn_boss(api, peer_id, user_id)
+        else:
+            send(api, peer_id, "❌ Только админы могут создавать босса!")
+            return
     
-    if command in ["история сезонов", "season history"]:
-        return seasons.cmd_history(api, peer_id)
+    if command in ["атака", "атаковать", "attack", "удар"]:
+        return boss.cmd_attack_boss(api, peer_id, user_id, player)
     
-    # === Мини-игры ===
+    # === ИГРЫ ===
     if command in ["игры", "games"]:
         return games.cmd_games_menu(api, peer_id)
+
+    if command.startswith("кнб ") or command == "кнб":
+        return games.cmd_rps(api, peer_id, player, text)
+
+    if command.startswith("число ") or command == "число":
+        return games.cmd_guess_number(api, peer_id, player, text)
+
+    if command.startswith("рулетка ") or command == "рулетка":
+        return games.cmd_roulette(api, peer_id, player, text)
+
+    if command.startswith("монетка ") or command == "монетка":
+        return games.cmd_coin(api, peer_id, player, text)
     
-    if command in ["кнб", "rps"]:
-        return games.cmd_rps_menu(api, peer_id)
+    # === PVP-ДУЭЛИ ===
+    if command.startswith("вызов ") and len(command.split()) >= 3:
+        return pvp.cmd_challenge_pvp(api, peer_id, user_id, player, text)
+
+    if command in ["принять", "accept"]:
+        return pvp.cmd_accept_pvp(api, peer_id, user_id, player)
+
+    if command in ["отклонить", "decline"]:
+        return pvp.cmd_decline_pvp(api, peer_id, user_id)
+
+    if command in ["бой", "battle", "fight"]:
+        return pvp.cmd_pvp_battle(api, peer_id, user_id, player)
+
+    if command in ["pvp", "pvp статус"]:
+        return pvp.cmd_pvp_status(api, peer_id, user_id)
     
-    if command.startswith("кнб ") or command.startswith("rps "):
-        return games.cmd_rps_play(api, peer_id, player, command)
+    if command in ["отменить", "cancel"]:
+        return pvp.cmd_cancel_pvp(api, peer_id, user_id)
+
+    # === ДРУГИЕ КОМАНДЫ ===
+    if command in ["сезон", "season"]:
+        return basic.cmd_season(api, peer_id, user_id, player)
     
-    if command in ["угадай", "guess"]:
-        return games.cmd_guess_menu(api, peer_id)
-    
-    if command.startswith("угадай ") or command.startswith("guess "):
-        return games.cmd_guess_play(api, peer_id, player, command)
-    
-    if command in ["лотерея", "lottery"]:
-        return games.cmd_lottery(api, peer_id, player)
-    
-    # === Кланы ===
     if command in ["клан", "clan"]:
-        return clans.cmd_clan_info(api, peer_id, user_id)
-    
-    if command.startswith("клан создать "):
-        return clans.cmd_create(api, peer_id, player, text)
-    
-    if command in ["кланы", "clans"]:
-        return clans.cmd_list(api, peer_id)
-    
-    if command.startswith("клан вступить "):
-        return clans.cmd_join(api, peer_id, player, command)
-    
-    if command in ["клан выйти", "clan leave"]:
-        return clans.cmd_leave(api, peer_id, user_id)
-    
-    if command.startswith("клан пригласить "):
-        return clans.cmd_invite(api, peer_id, user_id, command)
-    
-    if command.startswith("клан кикнуть "):
-        return clans.cmd_kick(api, peer_id, user_id, command)
-    
-    if command in ["клан распустить", "clan disband"]:
-        return clans.cmd_disband(api, peer_id, user_id)
-    
+        return clans.cmd_clan(api, peer_id, user_id, player)
+
+    if command.startswith("создать клан"):
+        return clans.cmd_create_clan(api, peer_id, user_id, player, text)
+
     if command in ["клан участники", "clan members"]:
-        return clans.cmd_members(api, peer_id, user_id)
-    
-    # === Настройки игрока (уведомления игрока) ===
-    if command in ["настройки", "settings", "напоминания"]:
-        return notifications.cmd_settings(api, peer_id, user_id)
+        return clans.cmd_clan_members(api, peer_id, user_id)
 
-    if command.startswith("включить "):
-        return notifications.cmd_enable(api, peer_id, user_id, command)
+    if command.startswith("клан пригласить"):
+        return clans.cmd_clan_invite(api, peer_id, user_id, text)
 
-    if command.startswith("выключить "):
-        return notifications.cmd_disable(api, peer_id, user_id, command)
+    if command in ["клан выйти", "clan leave"]:
+        return clans.cmd_clan_leave(api, peer_id, user_id)
+
+    if command in ["клан топ", "clan top"]:
+        return clans.cmd_clan_top(api, peer_id)
+
+    if command in ["клан распустить", "clan disband"]:
+        return clans.cmd_clan_disband(api, peer_id, user_id)
+
+    if command in ["клан принять", "clan accept"]:
+        return clans.cmd_clan_accept(api, peer_id, user_id, player)
+
+    if command in ["клан найти", "clan find"]:
+        return clans.cmd_clan_find(api, peer_id, user_id)
+
+    if command in ["клан казна", "clan treasury"]:
+        return clans.cmd_clan_treasury(api, peer_id, user_id)
+
+    if command in ["клан отклонить", "clan decline"]:
+        return clans.cmd_clan_decline(api, peer_id, user_id)
+
+    if command.startswith("клан кикнуть"):
+        return clans.cmd_clan_kick(api, peer_id, user_id, text)
     
-    # Команда "уведомления" без аргументов — для игрока
-    if command == "уведомления":
-        return notifications.cmd_settings(api, peer_id, user_id)
+    # === АДМИН-КОМАНДЫ (ТОЛЬКО ДЛЯ АДМИНОВ!) ===
+    if is_admin:
+        if command in ["админ", "admin", "админка"]:
+            return admin.cmd_admin_panel(api, peer_id)
+        
+        if command in ["статистика", "stats", "stat"]:
+            return admin.cmd_stats(api, peer_id)
+        
+        if command in ["игроки", "players"]:
+            return admin.cmd_players(api, peer_id)
+        
+        if command.startswith("выдать ") or command == "выдать":
+            return admin.cmd_give(api, peer_id, text)
+        
+        if command.startswith("бан ") or command == "бан":
+            return admin.cmd_ban(api, peer_id, text)
+        
+        if command.startswith("разбан ") or command == "разбан":
+            return admin.cmd_unban(api, peer_id, text)
+        
+        if command.startswith("мут ") or command == "мут":
+            return admin.cmd_mute(api, peer_id, text)
+        
+        if command.startswith("проверить ") or command == "проверить":
+            return admin.cmd_check_player(api, peer_id, text)
+        
+        if command.startswith("очистить ") or command == "очистить":
+            return admin.cmd_clear_player(api, peer_id, text)
+        
+        if command in ["сбросить сезон", "reset season"]:
+            return admin.cmd_reset_season(api, peer_id)
+        
+        if command in ["сбросить босса", "reset boss"]:
+            return admin.cmd_reset_boss(api, peer_id)
+        
+        if command.startswith("рассылка ") or command == "рассылка":
+            return admin.cmd_broadcast(api, peer_id, text)
+
+        if command in ["обновить имена", "update names"]:
+            return admin.cmd_update_names(api, peer_id)
+        
+        # === УПРАВЛЕНИЕ БЕСЕДОЙ (ТОЛЬКО ДЛЯ АДМИНОВ!) ===
+        if command in ["ограничить", "restrict"]:
+            return admin.cmd_restrict_chat(api, peer_id, text)
+        
+        if command in ["открыть", "open"]:
+            return admin.cmd_open_chat(api, peer_id, text)
+        
+        if command.startswith("приветствие ") or command == "приветствие":
+            return admin.cmd_set_welcome(api, peer_id, text)
+        
+        if command.startswith("прощание ") or command == "прощание":
+            return admin.cmd_set_goodbye(api, peer_id, text)
+        
+        if command in ["настройки беседы", "chat settings"]:
+            return admin.cmd_chat_settings(api, peer_id)
+        
+        if command.startswith("уведомления ") or command == "уведомления":
+            return admin.cmd_toggle_notify(api, peer_id, text)
+    
+    # === НЕИЗВЕСТНАЯ КОМАНДА ===
+    send(api, peer_id, "❓ Неизвестная команда. Напиши помощь для списка команд.")

@@ -1,18 +1,17 @@
 """
-Пакет utils — вспомогательные функции и проверки.
+Пакет config — конфигурация бота.
 """
-from utils.helpers import (
-    get_name,
-    send,
-    parse_user_id_from_mention,
-    add_exp,
-    get_player_damage,
-    get_player_defense,
-)
+from config.settings import *
+from config.shop import SHOP_ITEMS, WEAPONS, PETS
 
-from utils.checks import (
-    is_admin,
-    is_banned,
-    has_enough_money,
-    is_in_clan,
-)
+try:
+    from config.clans import CLAN_BONUSES, SEASON_REWARDS
+except ImportError:
+    CLAN_BONUSES = {}
+    SEASON_REWARDS = {}
+
+try:
+    from config.quests import DAILY_QUESTS, ACHIEVEMENTS
+except ImportError:
+    DAILY_QUESTS = {}
+    ACHIEVEMENTS = {}

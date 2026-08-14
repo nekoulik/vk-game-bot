@@ -2,6 +2,7 @@
 Вспомогательные функции для Club Anicoke Bot.
 """
 import re
+import json
 import random
 import vk_api
 from vk_api.utils import get_random_id
@@ -11,17 +12,22 @@ from vk_api.utils import get_random_id
 # 1. РАБОТА С VK API
 # ==========================================
 def get_name(api, user_id):
-    """Получить имя пользователя через VK API."""
+    """Получить имя пользователя."""
     try:
-        users = api.users.get(user_ids=user_id)
-        if users:
-            full_name = f"{users[0].get('first_name', '')} {users[0].get('last_name', '')}".strip()
+        # Пытаемся получить имя из API
+        response = api.users.get(user_ids=[user_id], fields=['first_name', 'last_name'])
+        if response:
+            user = response[0]
+            first_name = user.get('first_name', '')
+            last_name = user.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip()
             if full_name:
                 return full_name
-    except Exception:
-        pass
-    return f"ID{user_id}"
-
+    except Exception as e:
+        print(f"⚠️ Не удалось получить имя для {user_id}: {e}")
+    
+    # Если не получилось — возвращаем короткое имя
+    return f"Игрок #{str(user_id)[-4:]}"  # Последние 4 цифры ID
 
 def get_user_info(vk, user_id):
     """Получение расширенной информации о пользователе."""
@@ -41,8 +47,17 @@ def get_full_name(user_info):
     return f"{first} {last}".strip()
 
 
-def send(api, peer_id, text, attachment=None):
-    """Отправить сообщение (с поддержкой вложений)."""
+def send(api, peer_id, text, attachment=None, keyboard=None):
+    """
+    Отправить сообщение (с поддержкой вложений и клавиатуры).
+    
+    Args:
+        api: VK API объект
+        peer_id: ID получателя
+        text: Текст сообщения
+        attachment: Вложение (опционально)
+        keyboard: Клавиатура в формате VK (опционально)
+    """
     try:
         params = {
             'peer_id': peer_id,
@@ -51,6 +66,8 @@ def send(api, peer_id, text, attachment=None):
         }
         if attachment:
             params['attachment'] = attachment
+        if keyboard:
+            params['keyboard'] = json.dumps(keyboard)
         api.messages.send(**params)
         return True
     except Exception as e:

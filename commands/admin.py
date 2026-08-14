@@ -4,45 +4,48 @@
 import time
 from datetime import datetime
 from utils.helpers import send, get_name
+from utils.keyboard import get_admin_keyboard
 import db
 
 
 def cmd_admin_panel(api, peer_id):
-    """Показать админ-панель."""
+    """Показать админ-панель с кнопками."""
     text = (
-        "🛡️ Админ-панель:\n\n"
-        "📊 Статистика:\n"
-        "  статистика\n\n"
-        "👥 Игроки:\n"
-        "  игроки\n"
-        "  выдать <id> <сумма>\n"
-        "  бан <id>\n"
-        "  разбан <id>\n"
-        "  мут <id> <минуты>\n"
-        "  проверить <id>\n"
-        "  очистить <id>\n\n"
-        " Сезоны:\n"
-        "  сбросить сезон\n\n"
-        "👹 Босс:\n"
-        "  сбросить босса\n\n"
-        "📢 Рассылка:\n"
-        "  рассылка <текст>\n\n"
-        " Беседа:\n"
-        "  ограничить — закрыть беседу\n"
-        "  открыть — открыть беседу\n"
-        "  приветствие <текст>\n"
-        "  прощание <текст>\n"
-        "  настройки беседы\n"
-        "  уведомления <вход/выход> <вкл/выкл>"
+        "🛡️ *Админ-панель*\n\n"
+        "📊 *Статистика:*\n"
+        "  • статистика\n\n"
+        "👥 *Игроки:*\n"
+        "  • игроки\n"
+        "  • выдать <id> <сумма>\n"
+        "  • бан <id>\n"
+        "  • разбан <id>\n"
+        "  • мут <id> <минуты>\n"
+        "  • проверить <id>\n"
+        "  • очистить <id>\n\n"
+        " *Сезоны:*\n"
+        "  • сбросить сезон\n\n"
+        "👹 *Босс:*\n"
+        "  • сбросить босса\n\n"
+        "📢 *Рассылка:*\n"
+        "  • рассылка <текст>\n\n"
+        "💬 *Беседа:*\n"
+        "  • ограничить — закрыть беседу\n"
+        "  • открыть — открыть беседу\n"
+        "  • приветствие <текст>\n"
+        "  • прощание <текст>\n"
+        "  • настройки беседы\n"
+        "  • уведомления <вход/выход> <вкл/выкл>"
     )
-    send(api, peer_id, text)
+    
+    keyboard = get_admin_keyboard()
+    send(api, peer_id, text, keyboard=keyboard)
 
 
 def cmd_stats(api, peer_id):
     """Показать статистику бота."""
     stats = db.get_stats()
     text = (
-        f"📊 Статистика бота:\n\n"
+        f" *Статистика бота:*\n\n"
         f"👥 Всего игроков: {stats['total_players']}\n"
         f"💰 Всего монет: {stats['total_coins']:,}\n"
         f"⭐ Средний уровень: {stats['avg_level']}\n"
@@ -63,7 +66,7 @@ def cmd_players(api, peer_id):
     for i, p in enumerate(all_players[:20], start=1):
         balance = int(p.get("balance", 0))
         if balance == -1:
-            status = " 🚫"
+            status = " "
         elif balance == -2:
             status = " 🔇"
         else:
@@ -107,7 +110,7 @@ def cmd_ban(api, peer_id, command):
     """Забанить игрока."""
     parts = command.split()
     if len(parts) < 2:
-        send(api, peer_id, "❌ Формат: бан <id>")
+        send(api, peer_id, " Формат: бан <id>")
         return
     
     try:
@@ -240,7 +243,7 @@ def cmd_check_player(api, peer_id, command):
     balance = int(target.get("balance", 0))
     
     text = (
-        f"📋 Информация об игроке:\n\n"
+        f" *Информация об игроке:*\n\n"
         f"ID: {target['user_id']}\n"
         f"Имя: {target['name']}\n"
         f"Статус: {status}\n\n"
@@ -249,7 +252,7 @@ def cmd_check_player(api, peer_id, command):
         f"🏆 Очки сезона: {target.get('season_points', 0)}\n"
         f"💫 Опыт: {target.get('exp', 0)}\n\n"
         f"📅 Регистрация: {_format_datetime(target.get('created_at'))}\n"
-        f"🕐 Последняя активность: {_format_datetime(target.get('last_activity'))}"
+        f" Последняя активность: {_format_datetime(target.get('last_activity'))}"
     )
     
     send(api, peer_id, text)
@@ -265,12 +268,12 @@ def cmd_clear_player(api, peer_id, command):
     try:
         target_id = int(parts[1])
     except ValueError:
-        send(api, peer_id, "❌ ID должен быть числом!")
+        send(api, peer_id, " ID должен быть числом!")
         return
     
     target = db.get_player(target_id, lambda uid: get_name(api, uid))
     if not target:
-        send(api, peer_id, " Игрок не найден!")
+        send(api, peer_id, "❌ Игрок не найден!")
         return
     
     target["balance"] = 0
@@ -312,7 +315,7 @@ def cmd_broadcast(api, peer_id, text):
     
     for p in all_players:
         try:
-            send(api, p["last_peer_id"], f"📢 Важное сообщение от админа:\n\n{message}")
+            send(api, p["last_peer_id"], f" Важное сообщение от админа:\n\n{message}")
             sent_count += 1
             time.sleep(0.5)
         except Exception as e:
@@ -352,7 +355,7 @@ def cmd_set_goodbye(api, peer_id, text):
     """Установить прощальное сообщение."""
     message = text[len("прощание "):].strip()
     if not message:
-        send(api, peer_id, " Формат: прощание <текст>")
+        send(api, peer_id, "❌ Формат: прощание <текст>")
         return
     
     db.set_goodbye_message(peer_id, message)
@@ -363,23 +366,23 @@ def cmd_chat_settings(api, peer_id):
     """Показать настройки беседы."""
     settings = db.get_chat_settings(peer_id)
     
-    status = "🔒 Закрыта" if settings["is_restricted"] else "🔓 Открыта"
+    status = " Закрыта" if settings["is_restricted"] else "🔓 Открыта"
     notify_join = "✅ Вкл" if settings["notify_join"] else "❌ Выкл"
     notify_leave = "✅ Вкл" if settings["notify_leave"] else "❌ Выкл"
     
     text = (
-        f"⚙️ Настройки беседы:\n\n"
+        f"⚙️ *Настройки беседы:*\n\n"
         f"Статус: {status}\n"
         f"Уведомления о входе: {notify_join}\n"
         f"Уведомления о выходе: {notify_leave}\n\n"
         f"Приветствие: {settings['welcome_message'] or 'Не установлено'}\n"
         f"Прощание: {settings['goodbye_message'] or 'Не установлено'}\n\n"
-        f"Команды:\n"
-        f"  ограничить — закрыть беседу\n"
-        f"  открыть — открыть беседу\n"
-        f"  приветствие <текст> — установить приветствие\n"
-        f"  прощание <текст> — установить прощание\n"
-        f"  уведомления <вход/выход> <вкл/выкл>"
+        f"*Команды:*\n"
+        f"  • ограничить — закрыть беседу\n"
+        f"  • открыть — открыть беседу\n"
+        f"  • приветствие <текст> — установить приветствие\n"
+        f"  • прощание <текст> — установить прощание\n"
+        f"  • уведомления <вход/выход> <вкл/выкл>"
     )
     send(api, peer_id, text)
 
@@ -410,3 +413,33 @@ def cmd_toggle_notify(api, peer_id, command):
     else:
         db.set_notify_leave(peer_id, enabled)
         send(api, peer_id, f"✅ Уведомления о выходе {'включены' if enabled else 'выключены'}")
+
+def cmd_update_names(api, peer_id):
+    """Обновить имена всех игроков (исправляет старые форматы 'Игрок 123456')."""
+    from utils.helpers import get_name
+    
+    players = db.get_all_players()
+    updated_count = 0
+    error_count = 0
+    
+    send(api, peer_id, f"⏳ Начинаю обновление имён... Всего игроков: {len(players)}")
+    
+    for player in players:
+        user_id = player['user_id']
+        old_name = player['name']
+        
+        # Проверяем, нужно ли обновлять имя (старый формат "Игрок 123456789")
+        if old_name.startswith('Игрок ') and not old_name.startswith('Игрок #'):
+            try:
+                new_name = get_name(api, user_id)
+                if new_name and new_name != old_name:
+                    player['name'] = new_name
+                    db.save_player(player)
+                    updated_count += 1
+                    # Небольшая задержка, чтобы не превысить лимиты VK API (Flood Control)
+                    time.sleep(0.1)
+            except Exception as e:
+                print(f"⚠️ Ошибка обновления имени для {user_id}: {e}")
+                error_count += 1
+    
+    send(api, peer_id, f"✅ Обновление завершено!\n\n📊 Обновлено: {updated_count}\n❌ Ошибок: {error_count}\n👥 Всего проверено: {len(players)}")        

@@ -1,135 +1,109 @@
-"""Функции для работы с квестами и достижениями."""
-from datetime import datetime
-from db.base import get_conn
-from config.quests import DAILY_QUESTS, ACHIEVEMENTS
-from db.players import save_player
+"""
+Модуль работы с квестами в базе данных.
+"""
+import sqlite3
+from datetime import datetime, date
 
 
-def claim_daily_quests(player):
-    """Забрать награды за ежедневные квесты."""
-    if player.get("daily_quest_claimed", 0) == 1:
-        return False, "Квесты уже выполнены сегодня!"
+def init_quests_table():
+    """Инициализировать таблицу квестов."""
+    from db import get_conn
+    conn = get_conn()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS daily_quests (
+            user_id INTEGER,
+            quest_key TEXT,
+            progress INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            reward_claimed INTEGER DEFAULT 0,
+            date TEXT,
+            PRIMARY KEY (user_id, quest_key, date)
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS achievements (
+            user_id INTEGER,
+            achievement_key TEXT,
+            completed INTEGER DEFAULT 0,
+            completed_at DATETIME,
+            PRIMARY KEY (user_id, achievement_key)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+def get_daily_quests(user_id):
+    """Получить прогресс ежедневных квестов игрока."""
+    from db import get_conn
+    conn = get_conn()
+    today = date.today().isoformat()
+    cursor = conn.execute(
+        "SELECT quest_key, progress, completed, reward_claimed FROM daily_quests WHERE user_id = ? AND date = ?",
+        (user_id, today)
+    )
+    quests = {row["quest_key"]: dict(row) for row in cursor.fetchall()}
+    conn.close()
+    return quests
+
+
+def update_quest_progress(user_id, quest_key, amount=1):
+    """Обновить прогресс квеста."""
+    from db import get_conn
+    conn = get_conn()
+    today = date.today().isoformat()
+    conn.execute('''
+        INSERT INTO daily_quests (user_id, quest_key, progress, date)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, quest_key, date) DO UPDATE SET progress = progress + ?
+    ''', (user_id, quest_key, amount, today, amount))
+    conn.commit()
+    conn.close()
+
+
+def claim_quest_reward(user_id, quest_key):
+    """Забрать награду за квест."""
+    from db import get_conn
+    conn = get_conn()
+    today = date.today().isoformat()
+    cursor = conn.execute(
+        "SELECT * FROM daily_quests WHERE user_id = ? AND quest_key = ? AND date = ? AND completed = 1 AND reward_claimed = 0",
+        (user_id, quest_key, today)
+    )
+    quest = cursor.fetchone()
+    if not quest:
+        conn.close()
+        return None, "Квест не выполнен или награда уже получена"
     
-    today = datetime.now().strftime("%Y-%m-%d")
-    if player.get("last_quest_date") != today:
-        from db.players import check_and_reset_daily_quests
-        player = check_and_reset_daily_quests(player)
-
-    total_coins = 0
-    total_exp = 0
-    completed = []
-
-    for q_type, q_data in DAILY_QUESTS.items():
-        if q_type == "duels":
-            current = player.get("daily_duels", 0)
-        elif q_type == "boss":
-            current = player.get("daily_boss_kills", 0)
-        elif q_type == "coins":
-            current = player.get("daily_coins_earned", 0)
-        else:
-            current = 0
-
-        if current >= q_data["target"]:
-            total_coins += q_data["reward_coins"]
-            total_exp += q_data["reward_exp"]
-            completed.append(f"✅ {q_data['name']} (+{q_data['reward_coins']}💰, +{q_data['reward_exp']}⭐)")
-
-    if not completed:
-        return False, "Ни один квест ещё не выполнен. Продолжай играть!"
-
-    player["balance"] += total_coins
-    player["exp"] += total_exp
-    while player["exp"] >= player["level"] * 10:
-        player["exp"] -= player["level"] * 10
-        player["level"] += 1
-    
-    player["daily_quest_claimed"] = 1
-    save_player(player)
-    
-    msg = "🎉 Квесты выполнены!\n\n" + "\n".join(completed)
-    msg += f"\n\n💰 Всего: +{total_coins} монет\n⭐ Всего: +{total_exp} опыта"
-    return True, msg
+    conn.execute(
+        "UPDATE daily_quests SET reward_claimed = 1 WHERE user_id = ? AND quest_key = ? AND date = ?",
+        (user_id, quest_key, today)
+    )
+    conn.commit()
+    conn.close()
+    return dict(quest), None
 
 
-def get_daily_quests_status(player):
-    """Получить статус ежедневных квестов."""
-    today = datetime.now().strftime("%Y-%m-%d")
-    if player.get("last_quest_date") != today:
-        from db.players import check_and_reset_daily_quests
-        player = check_and_reset_daily_quests(player)
-
-    lines = [" Ежедневные задания:\n"]
-    for q_type, q_data in DAILY_QUESTS.items():
-        if q_type == "duels":
-            current = player.get("daily_duels", 0)
-        elif q_type == "boss":
-            current = player.get("daily_boss_kills", 0)
-        elif q_type == "coins":
-            current = player.get("daily_coins_earned", 0)
-        else:
-            current = 0
-            
-        target = q_data["target"]
-        status = "✅" if current >= target else ""
-        lines.append(f"{status} {q_data['name']} ({current}/{target}) — {q_data['reward_coins']}💰, {q_data['reward_exp']}⭐")
-    
-    if player.get("daily_quest_claimed", 0) == 1:
-        lines.append("\n✅ Награды уже получены сегодня.")
-    else:
-        lines.append("\n💡 Напиши 'выполнить квесты' чтобы забрать награды за завершённые.")
-    
-    return "\n".join(lines)
+def get_achievements(user_id):
+    """Получить достижения игрока."""
+    from db import get_conn
+    conn = get_conn()
+    cursor = conn.execute(
+        "SELECT achievement_key, completed, completed_at FROM achievements WHERE user_id = ?",
+        (user_id,)
+    )
+    achievements = {row["achievement_key"]: dict(row) for row in cursor.fetchall()}
+    conn.close()
+    return achievements
 
 
-def unlock_achievement(user_id, ach_id, player_name):
+def unlock_achievement(user_id, achievement_key):
     """Разблокировать достижение."""
+    from db import get_conn
     conn = get_conn()
-    try:
-        exists = conn.execute("SELECT 1 FROM achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id)).fetchone()
-        if exists:
-            return None
-        now = datetime.now().isoformat()
-        conn.execute("INSERT INTO achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)", (user_id, ach_id, now))
-        conn.commit()
-        return ACHIEVEMENTS.get(ach_id, {}).get("name", ach_id)
-    finally:
-        conn.close()
-
-
-def get_achievements_list(user_id):
-    """Получить список достижений игрока."""
-    conn = get_conn()
-    try:
-        unlocked = [row["achievement_id"] for row in conn.execute("SELECT achievement_id FROM achievements WHERE user_id = ?", (user_id,)).fetchall()]
-        lines = ["🏆 Достижения:\n"]
-        for ach_id, data in ACHIEVEMENTS.items():
-            if ach_id in unlocked:
-                lines.append(f"✅ {data['name']}: {data['desc']}")
-            else:
-                lines.append(f"🔒 {data['name']}: {data['desc']}")
-        return "\n".join(lines)
-    finally:
-        conn.close()
-
-
-def check_achievements_on_action(user_id, player, action):
-    """Проверить достижения после действия."""
-    new_achs = []
-    if action == "duel_win":
-        player["total_duels_won"] = player.get("total_duels_won", 0) + 1
-        if player["total_duels_won"] >= 1:
-            name = unlock_achievement(user_id, "first_blood", player["name"])
-            if name: new_achs.append(name)
-    elif action == "rich":
-        if player["balance"] >= 1000:
-            name = unlock_achievement(user_id, "rich", player["name"])
-            if name: new_achs.append(name)
-    elif action == "boss_kill":
-        player["total_boss_kills"] = player.get("total_boss_kills", 0) + 1
-        if player["total_boss_kills"] >= 3:
-            name = unlock_achievement(user_id, "boss_slayer", player["name"])
-            if name: new_achs.append(name)
-    
-    if new_achs:
-        save_player(player)
-    return new_achs
+    conn.execute('''
+        INSERT OR IGNORE INTO achievements (user_id, achievement_key, completed, completed_at)
+        VALUES (?, ?, 1, ?)
+    ''', (user_id, achievement_key, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
