@@ -149,11 +149,11 @@ vk-game-bot/
 - рассылка <текст> — рассылка
 ---
 🔧 Настройка
----
+
 config/settings.py
 ---
 # Настройки работы
----
+
 - WORK_REWARD_MIN = 50
 - WORK_REWARD_MAX = 150
 - DAILY_BONUS = 100
@@ -162,21 +162,21 @@ config/settings.py
 config/shop.py
 
 # Оружие
----
+
 WEAPONS = {
     "sword_iron": {"damage": 10, "price": 500},
     "sword_steel": {"damage": 25, "price": 1500},
 }
 ---
 # Питомцы
----
+
 PETS = {
     "cat": {"bonus_coins": 0.05, "price": 1000},
     "dog": {"bonus_damage": 0.10, "price": 1500},
 }
 ---
 📊 База данных
----
+
 - Бот использует SQLite. Основные таблицы:
 - players — игроки
 - boss — текущий босс
@@ -186,7 +186,7 @@ PETS = {
 - chat_settings — настройки беседы
 ---
 🛡️ Безопасность
----
+
 - Все SQL-запросы с параметрами (защита от SQL-инъекций)
 - Проверка прав администратора
 - Валидация входных данных
@@ -195,7 +195,7 @@ PETS = {
 📜 Лицензия
 
 MIT License
----
+
 👥 Авторы
 
 - ВКонтакте: Club Anicoke
