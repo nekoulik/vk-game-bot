@@ -83,35 +83,38 @@ GROUP_ID=id_группы
 4.Запустите бота
    python main.py
 
-📂 Структура проекта
+###  Структура проекта
+
+```
 vk-game-bot/
-├── commands/           # Обработчики команд
-│   ├── __init__.py     # Роутер команд
-│   ├── admin.py        # Админ-команды
-│   ├── basic.py        # Основные команды
-│   ├── boss.py         # Босс
-│   ├── clans.py        # Кланы
-│   ├── games.py        # Мини-игры
-│   ├── pvp.py          # PvP
-│   └── quests.py       # Квесты
-├── config/             # Конфигурация
-│   ├── settings.py     # Настройки
-│   ├── shop.py         # Магазин
-│   ├── quests.py       # Квесты
-│   └── clans.py        # Кланы
-├── db/                 # База данных
-│   ├── __init__.py     # Инициализация
-│   ├── players.py      # Игроки
-│   ├── boss.py         # Босс
-│   ├── duels.py        # Дуэли
-│   ├── items.py        # Предметы
-│   └── clans.py        # Кланы
-├── utils/              # Утилиты
-│   ├── helpers.py      # Вспомогательные функции
-│   └── keyboard.py     # Клавиатуры
-├── main.py             # Точка входа
-├── requirements.txt    # Зависимости
-└── README.md           # Документация
+├── commands/              # Обработчики команд
+│   ├── __init__.py        # Роутер команд
+│   ├── admin.py           # Админ-команды
+│   ├── basic.py           # Основные команды
+│   ├── boss.py            # Босс
+│   ├── clans.py           # Кланы
+│   ├── games.py           # Мини-игры
+│   ├── pvp.py             # PvP
+│   └── quests.py          # Квесты
+── config/                # Конфигурация
+│   ├── settings.py        # Настройки
+│   ├── shop.py            # Магазин
+│   ├── quests.py          # Квесты
+│   └── clans.py           # Кланы
+├── db/                    # База данных
+│   ├── __init__.py        # Инициализация
+│   ├── players.py         # Игроки
+│   ├── boss.py            # Босс
+│   ├── duels.py           # Дуэли
+│   ├── items.py           # Предметы
+│   └── clans.py           # Кланы
+├── utils/                 # Утилиты
+│   ├── helpers.py         # Вспомогательные функции
+│   └── keyboard.py        # Клавиатуры
+├── main.py                # Точка входа
+├── requirements.txt       # Зависимости
+└── README.md              # Документация
+```
 
 ⌨️ Основные команды
 
