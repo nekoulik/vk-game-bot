@@ -72,7 +72,7 @@
 2.Установите зависимости
 
    pip install -r requirements.txt
-
+---
 3.Настройте конфигурацию
 
    cp .env.example .env
@@ -82,11 +82,11 @@
 - VK_TOKEN=ваш_токен_группы
 - ADMIN_IDS=ваш_id,второй_id
 - GROUP_ID=id_группы
-
+---
 4.Запустите бота
 
    python main.py
-
+---
 ###  Структура проекта
 
 ```
