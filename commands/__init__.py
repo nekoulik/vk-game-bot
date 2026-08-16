@@ -3,13 +3,14 @@
 Направляет сообщения к соответствующим обработчикам.
 """
 from utils.helpers import send
-from utils.keyboard import get_main_keyboard, get_admin_keyboard
+from utils.keyboard import get_main_keyboard
 from commands import basic, admin, boss, quests, games, pvp, clans
 
 
 def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     """
     Распределить команды по обработчикам.
+    Возвращает True, если команда обработана, и False, если сообщение нужно игнорировать.
     """
     is_admin = user_id in ADMIN_IDS
     
@@ -17,7 +18,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
     if command in ["назад", "back"]:
         keyboard = get_main_keyboard()
         send(api, peer_id, "📋 Главное меню:", keyboard=keyboard)
-        return
+        return True
     
     # === ОСНОВНЫЕ КОМАНДЫ ===
     if command in ["помощь", "help", "хелп", "старт", "start"]:
@@ -79,7 +80,7 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
             return boss.cmd_spawn_boss(api, peer_id, user_id)
         else:
             send(api, peer_id, "❌ Только админы могут создавать босса!")
-            return
+            return True
     
     if command in ["атака", "атаковать", "attack", "удар"]:
         return boss.cmd_attack_boss(api, peer_id, user_id, player)
@@ -220,4 +221,5 @@ def route(command, user_id, peer_id, text, player, api, ADMIN_IDS):
             return admin.cmd_toggle_notify(api, peer_id, text)
     
     # === НЕИЗВЕСТНАЯ КОМАНДА ===
-    send(api, peer_id, "❓ Неизвестная команда. Напиши помощь для списка команд.")
+    # ✅ Теперь бот просто молча игнорирует сообщение и не спамит в чат
+    return False

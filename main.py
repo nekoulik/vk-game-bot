@@ -89,12 +89,12 @@ def handle_member_join(peer_id, user_id, user_name):
             print(f"🚫 Беседа закрыта, выгоняем {user_name}...")
             success = db.kick_user(api, peer_id, user_id)
             if success:
-                send(api, peer_id, f" {user_name} был автоматически выгнан (беседа закрыта)")
+                send(api, peer_id, f"🚫 {user_name} был автоматически выгнан (беседа закрыта)")
             else:
-                send(api, peer_id, f"️ Не удалось выгнать {user_name}")
+                send(api, peer_id, f"⚠️ Не удалось выгнать {user_name}")
     else:
         if settings["notify_join"]:
-            send(api, peer_id, f" {user_name} присоединился к беседе!")
+            send(api, peer_id, f"👋 {user_name} присоединился к беседе!")
         
         if settings["welcome_message"]:
             welcome = settings["welcome_message"].replace("{name}", user_name)
@@ -185,7 +185,7 @@ def handle_message(event):
         # Если такое же сообщение было меньше 10 секунд назад — пропускаем
         if msg_hash in processed_messages:
             if now - processed_messages[msg_hash] < 10:
-                print(f"⏱️ Дубликат пропущен: {text[:30]}")
+                print(f"️ Дубликат пропущен: {text[:30]}")
                 return
         
         processed_messages[msg_hash] = now
@@ -205,7 +205,7 @@ def handle_message(event):
             mute_until = player.get("mute_until", 0)
             if mute_until and int(mute_until) > int(time.time()):
                 remaining = int((int(mute_until) - int(time.time())) / 60)
-                send(api, peer_id, f"🔇 Вы в муте! Осталось: {remaining} мин.")
+                send(api, peer_id, f" Вы в муте! Осталось: {remaining} мин.")
                 return
             else:
                 player["balance"] = 0
@@ -218,20 +218,24 @@ def handle_message(event):
             settings = db.get_chat_settings(peer_id)
             if settings["is_restricted"]:
                 if user_id not in ADMIN_IDS:
-                    print(f" Беседа закрыта, выгоняем {user_id}...")
+                    print(f"🚫 Беседа закрыта, выгоняем {user_id}...")
                     success = db.kick_user(api, peer_id, user_id)
                     if success:
-                        send(api, peer_id, f" Пользователь был автоматически выгнан (беседа закрыта)")
+                        send(api, peer_id, f"🚫 Пользователь был автоматически выгнан (беседа закрыта)")
                     return
             
             # Проверяем изменения в составе участников
             check_chat_members_changes(peer_id)
         
+        # === ОБРАБОТКА КОМАНДЫ ===
         command = text.lower()
         print(f"🔀 Команда: '{command}'")
         
-        route(command, user_id, peer_id, text, player, api, ADMIN_IDS)
-        print(f"✅ Команда обработана")
+        handled = route(command, user_id, peer_id, text, player, api, ADMIN_IDS)
+        if handled:
+            print(f"✅ Команда обработана")
+        else:
+            print(f"️ Сообщение проигнорировано (неизвестная команда)")
         
     except Exception as e:
         print(f"❌ Ошибка обработки сообщения: {e}")
@@ -273,7 +277,7 @@ def main():
     except Exception as e:
         print(f"❌ Ошибка longpoll: {e}")
         traceback.print_exc()
-        print(" Перезапуск через 10 секунд...")
+        print("⏳ Перезапуск через 10 секунд...")
         time.sleep(10)
         
         try:
@@ -281,7 +285,7 @@ def main():
             print("✅ Longpoll пересоздан")
             main()
         except Exception as e2:
-            print(f"️ Ошибка пересоздания longpoll: {e2}")
+            print(f"⚠️ Ошибка пересоздания longpoll: {e2}")
 
 
 if __name__ == "__main__":
